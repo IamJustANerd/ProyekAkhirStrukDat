@@ -17,6 +17,10 @@ Project Black Friday
 int display;                      // current window display
 int displayWidth;                 // max window width
 int displayHeight;                // max window height
+int playerSize = 80;
+
+Vector2 worldPos = {400, 225};
+Vector2 startingPos = {400, 225};
 
 // Camera
 Camera2D camera;
@@ -30,18 +34,47 @@ Texture2D playerTex;
 // Classes
 class Weapon
 {
+    private:
+        Vector2 offset; // Offset from player's position
+        Vector2 pos;
+        float rotation;
+        float size;     
 
+    public:
+        Weapon(float _size, Vector2 _offset){
+            size = _size;
+            offset = _offset;
+        }
+
+        void update(Vector2 playerPos, float playerRotation) {
+            // Rotate the offset according to the player's rotation
+            Vector2 rotatedOffset = Vector2Rotate(offset, playerRotation * DEG2RAD);
+
+            // Set the weapon position relative to the player's position
+            // Add the rotated offset to the player's position
+            // You may need to adjust the offset further to fine-tune the weapon's position
+            pos = Vector2Add(playerPos, rotatedOffset);
+            
+            // Set the weapon rotation to match player rotation
+            rotation = playerRotation;
+        }
+
+        void draw() {
+            // Draw the weapon at its position
+            DrawTexturePro(playerTex, Rectangle {0, 0, size, size}, {pos.x, pos.y, size, size}, {size / 2, size / 2}, rotation, RAYWHITE);
+        }
 };
 class Entity
 {
     protected:
     float speed = 1.0f;
-    float size = 20.0f;
+    float size = 40.0f;
     Vector2 pos;
 
     public:
     float getPosX() { return pos.x; }
     float getPosY() { return pos.y; }
+    float getSize() { return size; }
     Vector2 getPos() { return pos; }
 
     virtual void update() = 0;
@@ -51,22 +84,27 @@ class Entity
 class Player : public Entity
 {
     private:
-    int sprintEnergy = 300;
+    int sprintEnergy = 900;
     float sprintSpeed = 5.0f;
     float normalSpeed = 1.0f;
     bool isSprinting = false;
     float rotation = 0.0f;
+    float size = 80.0f;
 
     public:
     Player(Vector2 _pos) {
         pos = _pos;
     }
 
+    int getSprintEnergy() { return sprintEnergy; }
+
+    float getRotation() { return rotation; }
+
     void update() override
     {
         // Player Sprint mode
         // Increase movement speed for a certain period of time
-        if((IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT)) && !isSprinting && sprintEnergy >= 300)
+        if((IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT)) && !isSprinting && sprintEnergy >= 900)
         {
             isSprinting = true;
         }
@@ -74,7 +112,7 @@ class Player : public Entity
         if(isSprinting && sprintEnergy > 0)
         {
             speed = sprintSpeed;
-            sprintEnergy -= 1;
+            sprintEnergy -= 6;
         }
         else
         {
@@ -82,7 +120,7 @@ class Player : public Entity
 
             speed = normalSpeed;
 
-            if(sprintEnergy < 300)
+            if(sprintEnergy < 900)
             {
                 sprintEnergy += 1;
             }
@@ -93,32 +131,36 @@ class Player : public Entity
         if(IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))
         {
             pos.x -= speed;
+            worldPos.x -= speed;
         }
         else if(IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D))
         {
             pos.x += speed;
+            worldPos.x += speed;
         }
         
         // Up Down Movement
         if(IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))
         {
             pos.y -= speed;
+            worldPos.y -= speed;
         }
         else if(IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S))
         {
             pos.y += speed;
+            worldPos.x += speed;
         }
 
         // Player facing and rotation
         Vector2 mousePos = GetMousePosition();
-        Vector2 dir = { mousePos.x - pos.x, mousePos.y - pos.y };
-        rotation = atan2f(dir.y, dir.x) * 180.0f / PI;
+        Vector2 dir = { mousePos.x - startingPos.x, mousePos.y - startingPos.y };
+        rotation = atan2f(dir.y, dir.x) * RAD2DEG;
     }
 
     void draw() override
     {
-        DrawTexturePro(playerTex, Rectangle {0, 0, 20, 20}, {pos.x, pos.y, 20, 20}, {20 / 2, 20 / 2}, rotation, RAYWHITE);
-        DrawText(TextFormat("Energy: %d%", sprintEnergy / 3), pos.x, pos.y, 20, BLACK);
+        DrawCircle(pos.x, pos.y, size / 2, RED);
+        DrawTexturePro(playerTex, Rectangle {0, 0, size, size}, {pos.x, pos.y, size, size}, {size / 2, size / 2}, rotation, RAYWHITE);
     }
 };
 
@@ -133,8 +175,8 @@ void WindowSetup()
     display = GetCurrentMonitor();
     displayWidth = 800;
     displayHeight = 450;
-    displayWidth = GetMonitorWidth(display);
-    displayHeight = GetMonitorHeight(display);
+    //displayWidth = GetMonitorWidth(display);
+    //displayHeight = GetMonitorHeight(display);
 }
 
 int GetDisplayWidth()
@@ -178,7 +220,7 @@ void LoadAllImage()
 
 void ResizeAllImage()
 {
-    ImageResize(&playerImg, 20, 20);
+    ImageResize(&playerImg, playerSize, playerSize);
 }
 
 void LoadAllTexture()
@@ -217,7 +259,7 @@ int main()
 
     // Starting window size
     InitWindow(displayWidth, displayHeight, "Raylib - Black Friday");
-    ToggleFullscreen();
+    //ToggleFullscreen();
 
     // Texture Setup
     TextureSetup();
@@ -226,7 +268,7 @@ int main()
     SetTargetFPS(60);
 
     Player player({ GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f });
-
+    Weapon weapon(80.0f, {player.getSize(), player.getSize()});
     int cnt = 0;
 
     // Game loop
@@ -237,11 +279,18 @@ int main()
         // Update player
         player.update();
 
+        // Update weapon
+        weapon.update(player.getPos(), player.getRotation());
+
+        Vector2 mousePos = GetMousePosition();
         if(cnt == 60) {
-            std::cout << player.getPosX() << ' ' << player.getPosY() << '\n';
+            std::cout << "Mouse : " << mousePos.x << ' ' << mousePos.y << '\n';
+            std::cout << "Player: " << player.getPosX() << ' ' << player.getPosY() << '\n';
+            std::cout << "World : " << worldPos.x << ' ' << worldPos.y << '\n';
             cnt = 0;
         }
         cnt += 1;
+        
 
         // Update camera
         UpdateCamera(player);
@@ -257,14 +306,18 @@ int main()
             //-----------------------------------------------------------------------------------------------
             BeginMode2D(camera);
 
+            DrawRectangle(GetDisplayWidth() / 2, GetDisplayHeight() / 2, 10, 10, RED);
+
             player.draw();
 
-            DrawRectangle(GetDisplayWidth() / 2, GetDisplayHeight() / 2, 10, 10, RED);
+            weapon.draw();
 
             EndMode2D();
             //-----------------------------------------------------------------------------------------------
 
         DrawText("FURINA BEST GIRLLLLLLLL", 0, 0, 30, BLUE);
+
+        DrawText(TextFormat("Energy: %d%", player.getSprintEnergy() / 9), 0, 30, 30, BLACK);
 
         EndDrawing();
         //----------------------------------------------------------------------------------
