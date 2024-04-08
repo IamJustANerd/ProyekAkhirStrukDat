@@ -26,6 +26,10 @@ Vector2 cameraPos;
 Vector2 cameraTarget;
 
 // Classes
+class Weapon
+{
+
+};
 class Entity
 {
     protected:
@@ -44,6 +48,12 @@ class Entity
 
 class Player : public Entity
 {
+    private:
+    int sprintEnergy = 300;
+    float sprintSpeed = 5.0f;
+    float normalSpeed = 1.0f;
+    bool isSprinting = false;
+
     public:
     Player(Vector2 _pos) {
         pos = _pos;
@@ -51,13 +61,56 @@ class Player : public Entity
 
     void update() override
     {
-        pos.x += speed;
-        pos.y += speed;
+        // Player Sprint mode
+        // Increase movement speed for a certain period of time
+        if((IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT)) && !isSprinting && sprintEnergy >= 300)
+        {
+            isSprinting = true;
+        }
+        
+        if(isSprinting && sprintEnergy > 0)
+        {
+            speed = sprintSpeed;
+            sprintEnergy -= 1;
+        }
+        else
+        {
+            isSprinting = false;
+
+            speed = normalSpeed;
+
+            if(sprintEnergy < 300)
+            {
+                sprintEnergy += 1;
+            }
+        }
+
+        // Player Movements
+        // Left Right Movement
+        if(IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))
+        {
+            pos.x -= speed;
+        }
+        else if(IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D))
+        {
+            pos.x += speed;
+        }
+        
+        // Up Down Movement
+        if(IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))
+        {
+            pos.y -= speed;
+        }
+        else if(IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S))
+        {
+            pos.y += speed;
+        }
     }
 
     void draw() override
     {
         DrawCircle(pos.x, pos.y, size, BLUE);
+        DrawText(TextFormat("Energy: %d%", sprintEnergy / 3), pos.x, pos.y, 20, BLACK);
     }
 };
 
@@ -70,6 +123,8 @@ class Zombie : public Entity
 void WindowSetup()
 {
     display = GetCurrentMonitor();
+    displayWidth = 800;
+    displayHeight = 450;
     displayWidth = GetMonitorWidth(display);
     displayHeight = GetMonitorHeight(display);
 }
