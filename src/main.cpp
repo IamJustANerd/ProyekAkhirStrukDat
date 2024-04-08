@@ -10,131 +10,74 @@ Project Black Friday
 #include "../include/raymath.h"
 #include <stddef.h>                 // Null Reference (for debugging purpose)
 #include <stdio.h>                  // Standard Input-Output
+#include <iostream>
 
+// Variables
 const float phi = 3.14;
-Image earthImg;
-Image moonImg;
-Texture2D earthTex;
-Texture2D moonTex;
+int display;                  // current window display
+int displayWidth;                 // max window width
+int displayHeight;                // max window height
+Camera2D camera;
 
-class Benda {
-    protected:
-        int x, y;
-        int speedX, speedY;
-        float radius;
-    public:
-    Benda(int _x, int _y, int _speedX, int _speedY, float _radius) {
-        x = _x;
-        y = _y;
-        speedX = _speedX;
-        speedY = _speedY;
-        radius = _radius;
-    }
+// Classes
+class Entity
+{
 
-    virtual void update() = 0;
-    virtual void draw() = 0;
-    int getX() { return x; }
-    int getY() { return y; }
-    float getRadius() { return radius; }
 };
 
-class Bola : public Benda {
-    private:
-        Vector2 position;
-        Color color;
+class Player : public Entity
+{
+};
+
+class Zombie : public Entity
+{
+};
+
+// Functions
+
+void WindowSetup()
+{
+    display = GetCurrentMonitor();
+    displayWidth = GetMonitorWidth(display);
+    displayHeight = GetMonitorHeight(display);
+}
+
+int GetDisplayWidth()
+{
+    display = GetCurrentMonitor();
     
-    public:
-        Bola(int  _x, int _y, int _speedX, int _speedY, int _radius) : Benda(_x, _y, _speedX, _speedY, _radius) {
-            x = _x;
-            y = _y;
-            speedX = _speedX;
-            speedY = _speedY;
-            radius = _radius;
-        }
-
-        void update() override {
-            x += speedX;
-            y += speedY;
-
-            if (x < radius || x > GetScreenWidth() - radius) {
-                speedX = -speedX;
-            }
-            if (y < radius || y > GetScreenHeight() - radius) {
-                speedY = -speedY;
-            }
-        }
-
-        void draw() override {
-            position.x = x;
-            position.y = y;
-            //DrawCircle(position.x, position.y, radius, color);
-            DrawTexture(earthTex, position.x - radius, position.y - radius, WHITE);
-        }
-
-        void set_color(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
-            color = {r, g, b, a};
-        }
-
-        
-};
-
-class Satelit : public Benda {
-    private:
-        Vector2 position;
-        Color color;
-        Bola* parent;
-        int dist;
-        int angle = 0;
-
-    public:
-        Satelit(int  _x, int _y, int _speedX, int _speedY, int _radius, Bola* _parent) : Benda(_x, _y, _speedX, _speedY, _radius) {
-            x = _x;
-            y = _y;
-            speedX = _speedX;
-            speedY = _speedY;
-            radius = _radius;
-            parent = _parent;
-            dist = abs(radius * 2 + _parent->getRadius());
-        }
-
-        void update() override {
-            // Buat satelit mengorbit parent / induknya
-            position.x = parent->getX() + dist*cos(angle * phi / 180);
-            position.y = parent->getY() - dist*sin(angle * phi / 180);
-            angle += 2;
-            if(angle >= 360)
-            {
-                angle = 0;
-            }
-        }
-
-        void draw() override {
-            //DrawCircle(position.x, position.y, radius, WHITE);
-            DrawTexture(moonTex, position.x - radius, position.y - radius, WHITE);
-        }
-};
-
-void LoadAllImage() {
-    earthImg = LoadImage("../graphics/earth.png");
-    moonImg = LoadImage("../graphics/moon.png");
+    return GetMonitorWidth(display);
 }
 
-void ResizeAllImage() {
-    ImageResize(&earthImg, 80, 80);
-    ImageResize(&moonImg, 40, 40);
+int GetDisplayHeight()
+{
+    display = GetCurrentMonitor();
+
+    return GetMonitorHeight(display);
 }
 
-void LoadAllTexture() {
-    earthTex = LoadTextureFromImage(earthImg);
-    moonTex = LoadTextureFromImage(moonImg);
+void CameraSetup()
+{
+    camera = { 0 };
 }
 
-void UnloadAllImage() {
-    UnloadImage(earthImg);
-    UnloadImage(moonImg);
+void LoadAllImage()
+{
 }
 
-void Setup()
+void ResizeAllImage()
+{
+}
+
+void LoadAllTexture()
+{
+}
+
+void UnloadAllImage()
+{
+}
+
+void TextureSetup()
 {
     // Set image yang dipakai
     // 1. Load all images
@@ -145,45 +88,47 @@ void Setup()
 
     // 3. Load all textures from images
     LoadAllTexture();
+
+    // 4. Unload all images since they've been chenged into textures
+    UnloadAllImage();
 }
 
-int main() {
-    // Inisialisasi jendela Raylib
-    const int screenWidth = 800;
-    const int screenHeight = 450;
-    InitWindow(screenWidth, screenHeight, "Raylib Bola Pantul");
+int main()
+{
+    // Window setup
+    WindowSetup();
 
-    // Setup
-    Setup();
+    // Camera setup
+    CameraSetup();
 
-    // Membuat objek Bola dan Satelit
-    Bola earth(400, 225, 5, 4, 40);
-    Satelit moon(480, 305, 5, 4, 20, &earth);
+    // Starting window size
+    InitWindow(displayWidth, displayHeight, "Raylib - Black Friday");
+    ToggleFullscreen();
 
-    // Ubah earth menjadi hijau
-    earth.set_color(0, 228, 48, 255);
+    // Texture Setup
+    TextureSetup();
 
-    // Mengatur FPS (frame per second)
+    // Set Game FPS (frame per second)
     SetTargetFPS(60);
 
     // Game loop
-    while (!WindowShouldClose()) { // Deteksi tombol close window atau ESC key
-        // Update
-        earth.update();
-        moon.update();
-
+    while (!WindowShouldClose())        // While the window is still open
+    {
         // Draw
+        //----------------------------------------------------------------------------------
         BeginDrawing();
-            ClearBackground(BLACK);
-            earth.draw();
-            moon.draw();
+
+        ClearBackground(RAYWHITE);
+
+        DrawText("Tes", GetDisplayWidth() / 2, GetDisplayHeight() / 2, 20, LIGHTGRAY);
+        DrawRectangle(0, 0, 100, 100, RED);
+
         EndDrawing();
+        //----------------------------------------------------------------------------------
     }
 
     // De-Initialization
-    CloseWindow(); // Close window and OpenGL context
-    
-    UnloadAllImage();
+    CloseWindow();
 
     return 0;
 }
