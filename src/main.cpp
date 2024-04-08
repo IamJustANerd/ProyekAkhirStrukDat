@@ -13,8 +13,6 @@ Project Black Friday
 #include <iostream>
 
 // Variables
-const float phi = 3.14;
-
 // Window display
 int display;                      // current window display
 int displayWidth;                 // max window width
@@ -24,6 +22,10 @@ int displayHeight;                // max window height
 Camera2D camera;
 Vector2 cameraPos;
 Vector2 cameraTarget;
+
+// Assets
+Image playerImg;
+Texture2D playerTex;
 
 // Classes
 class Weapon
@@ -53,6 +55,7 @@ class Player : public Entity
     float sprintSpeed = 5.0f;
     float normalSpeed = 1.0f;
     bool isSprinting = false;
+    float rotation = 0.0f;
 
     public:
     Player(Vector2 _pos) {
@@ -105,11 +108,16 @@ class Player : public Entity
         {
             pos.y += speed;
         }
+
+        // Player facing and rotation
+        Vector2 mousePos = GetMousePosition();
+        Vector2 dir = { mousePos.x - pos.x, mousePos.y - pos.y };
+        rotation = atan2f(dir.y, dir.x) * 180.0f / PI;
     }
 
     void draw() override
     {
-        DrawCircle(pos.x, pos.y, size, BLUE);
+        DrawTexturePro(playerTex, Rectangle {0, 0, 20, 20}, {pos.x, pos.y, 20, 20}, {20 / 2, 20 / 2}, rotation, RAYWHITE);
         DrawText(TextFormat("Energy: %d%", sprintEnergy / 3), pos.x, pos.y, 20, BLACK);
     }
 };
@@ -165,18 +173,22 @@ void UpdateCamera(Player player)
 
 void LoadAllImage()
 {
+    playerImg = LoadImage("../graphics/earth.png");
 }
 
 void ResizeAllImage()
 {
+    ImageResize(&playerImg, 20, 20);
 }
 
 void LoadAllTexture()
 {
+    playerTex = LoadTextureFromImage(playerImg);
 }
 
 void UnloadAllImage()
 {
+    UnloadImage(playerImg);
 }
 
 void TextureSetup()
