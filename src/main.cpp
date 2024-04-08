@@ -11,6 +11,7 @@ Project Black Friday
 #include <stddef.h>                 // Null Reference (for debugging purpose)
 #include <stdio.h>                  // Standard Input-Output
 #include <iostream>
+#include <vector>
 
 // Variables
 // Window display
@@ -18,9 +19,11 @@ int display;                      // current window display
 int displayWidth;                 // max window width
 int displayHeight;                // max window height
 int playerSize = 80;
+int weaponWidth = 80;
+int weaponHeight = 20;
 
-Vector2 worldPos = {400, 225};
-Vector2 startingPos = {400, 225};
+Vector2 worldPos;
+Vector2 startingPos;
 
 // Camera
 Camera2D camera;
@@ -29,20 +32,66 @@ Vector2 cameraTarget;
 
 // Assets
 Image playerImg;
+Image weaponImg[20];
+Texture2D weaponTex[20];
 Texture2D playerTex;
 
 // Classes
+class Projectile {
+    private:
+        Vector2 position;
+        Vector2 velocity;
+        float speed;
+        int lifetime = 300;        // Projectile might be disappeared after a certain amount of time
+        bool alive = true;
+
+    public:
+        Projectile(Vector2 _position, float _direction, float _speed) {
+            position = _position;
+            speed = _speed;
+
+            // Calculate velocity based on direction and speed
+            velocity.x = cosf(_direction * DEG2RAD) * _speed;
+            velocity.y = sinf(_direction * DEG2RAD) * _speed;
+        }
+
+        bool IsAlive() { return alive; }
+
+        void update() {
+            // Update projectile position based on velocity
+            position = Vector2Add(position, velocity);
+
+            lifetime -= 1;
+
+            if(lifetime <= 0)
+                alive = false;
+        }
+
+        void draw() const {
+            // Draw the projectile at its position
+            DrawCircleV(position, 3, BLACK);
+        }
+
+        Vector2 getPosition() const {
+            return position;
+        }
+};
+
 class Weapon
 {
     private:
         Vector2 offset; // Offset from player's position
         Vector2 pos;
         float rotation;
-        float size;     
+        float width, height;     
+
+        std::vector<Projectile> projectiles;
+        float projectileSpeed = 3.0f;
 
     public:
-        Weapon(float _size, Vector2 _offset){
-            size = _size;
+        Weapon(float _width, float _height, Vector2 _offset){
+            width = _width;
+            height = _height;
             offset = _offset;
         }
 
@@ -51,17 +100,47 @@ class Weapon
             Vector2 rotatedOffset = Vector2Rotate(offset, playerRotation * DEG2RAD);
 
             // Set the weapon position relative to the player's position
-            // Add the rotated offset to the player's position
-            // You may need to adjust the offset further to fine-tune the weapon's position
+            // then add the rotated offset to the player's position
+            // Dev note: Offset adjustment might be required
             pos = Vector2Add(playerPos, rotatedOffset);
             
             // Set the weapon rotation to match player rotation
             rotation = playerRotation;
+
+            // Calculate the front end of the weapon
+            Vector2 frontEndOffset = {width / 2, 0};
+            Vector2 frontEndPos = Vector2Add(pos, Vector2Rotate(frontEndOffset, rotation * DEG2RAD));
+
+            // Shot projectile when mouse button is pressed
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                // Calculate the direction of the projectile based on the weapon's rotation
+                float projectileDirection = rotation;
+
+                // Create the projectile object with its position set to the front end of the weapon
+                // and its velocity determined by the direction of fire
+                projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed));
+            }
+
+            // Update all projectiles
+            auto it = projectiles.begin();
+            while (it != projectiles.end()) {
+                it->update();
+                if (!it->IsAlive()) {
+                    it = projectiles.erase(it); // Remove projectile if its lifetime has expired
+                } else {
+                    ++it;
+                }
+            }
         }
 
         void draw() {
             // Draw the weapon at its position
-            DrawTexturePro(playerTex, Rectangle {0, 0, size, size}, {pos.x, pos.y, size, size}, {size / 2, size / 2}, rotation, RAYWHITE);
+            DrawTexturePro(weaponTex[0], Rectangle {0, 0, width, height}, {pos.x, pos.y, width, height}, {width / 2, height / 2}, rotation, RAYWHITE);
+        
+            // Draw all projectiles
+            for (const auto& projectile : projectiles) {
+                projectile.draw();
+            }
         }
 };
 class Entity
@@ -175,8 +254,8 @@ void WindowSetup()
     display = GetCurrentMonitor();
     displayWidth = 800;
     displayHeight = 450;
-    //displayWidth = GetMonitorWidth(display);
-    //displayHeight = GetMonitorHeight(display);
+    displayWidth = GetMonitorWidth(display);
+    displayHeight = GetMonitorHeight(display);
 }
 
 int GetDisplayWidth()
@@ -216,21 +295,25 @@ void UpdateCamera(Player player)
 void LoadAllImage()
 {
     playerImg = LoadImage("../graphics/earth.png");
+    weaponImg[0] = LoadImage("../graphics/baguette.png");
 }
 
 void ResizeAllImage()
 {
     ImageResize(&playerImg, playerSize, playerSize);
+    ImageResize(&weaponImg[0], weaponWidth, weaponHeight);
 }
 
 void LoadAllTexture()
 {
     playerTex = LoadTextureFromImage(playerImg);
+    weaponTex[0] = LoadTextureFromImage(weaponImg[0]);
 }
 
 void UnloadAllImage()
 {
     UnloadImage(playerImg);
+    UnloadImage(weaponImg[0]);
 }
 
 void TextureSetup()
@@ -261,6 +344,11 @@ int main()
     InitWindow(displayWidth, displayHeight, "Raylib - Black Friday");
     //ToggleFullscreen();
 
+    // World Position
+    std::cout << displayWidth << ' ' << displayHeight << '\n';
+    worldPos = Vector2{float(GetDisplayWidth()) / 2, float(GetDisplayHeight()) / 2};
+    startingPos = worldPos;
+
     // Texture Setup
     TextureSetup();
 
@@ -268,7 +356,7 @@ int main()
     SetTargetFPS(60);
 
     Player player({ GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f });
-    Weapon weapon(80.0f, {player.getSize(), player.getSize()});
+    Weapon weapon(80.0f, 20.0f, {player.getSize(), player.getSize()});
     int cnt = 0;
 
     // Game loop
