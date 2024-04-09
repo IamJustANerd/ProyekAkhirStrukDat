@@ -12,6 +12,7 @@ Project Black Friday
 #include <stdio.h>                  // Standard Input-Output
 #include <iostream>
 #include <vector>
+#include <algorithm>
 
 // Variables
 // Window display
@@ -19,6 +20,7 @@ int display;                      // current window display
 int displayWidth;                 // max window width
 int displayHeight;                // max window height
 int playerSize = 80;
+int zombieSize = 80;
 int weaponWidth = 80;
 int weaponHeight = 20;
 
@@ -32,23 +34,36 @@ Vector2 cameraTarget;
 
 // Assets
 Image playerImg;
+Image zombieImg[10];
 Image weaponImg[20];
-Texture2D weaponTex[20];
 Texture2D playerTex;
+Texture2D zombieTex[10];
+Texture2D weaponTex[20];
+
+// Struct
+struct Circle
+{
+    Vector2 pos;
+    float radius;
+};
 
 // Classes
-class Projectile {
+class Projectile
+{
     private:
-        Vector2 position;
+        Vector2 pos;
         Vector2 velocity;
         float speed;
+        float size;
         int lifetime = 300;        // Projectile might be disappeared after a certain amount of time
         bool alive = true;
 
     public:
-        Projectile(Vector2 _position, float _direction, float _speed) {
-            position = _position;
+        Projectile(Vector2 _pos, float _direction, float _speed, float _size)
+        {
+            pos = _pos;
             speed = _speed;
+            size = _size;
 
             // Calculate velocity based on direction and speed
             velocity.x = cosf(_direction * DEG2RAD) * _speed;
@@ -57,9 +72,10 @@ class Projectile {
 
         bool IsAlive() { return alive; }
 
-        void update() {
+        void update()
+        {
             // Update projectile position based on velocity
-            position = Vector2Add(position, velocity);
+            pos = Vector2Add(pos, velocity);
 
             lifetime -= 1;
 
@@ -67,16 +83,25 @@ class Projectile {
                 alive = false;
         }
 
-        void draw() const {
+        void draw() const
+        {
             // Draw the projectile at its position
-            DrawCircleV(position, 3, BLACK);
+            DrawCircleV(pos, size, BLACK);
         }
 
-        Vector2 getPosition() const {
-            return position;
+        Vector2 getPosition() const
+        {
+            return pos;
+        }
+
+        float getSize() const
+        { 
+            return size;
         }
 };
 
+// Dynamic array to contain all existing projectiles in the game
+std::vector<Projectile> projectiles;
 class Weapon
 {
     private:
@@ -85,17 +110,18 @@ class Weapon
         float rotation;
         float width, height;     
 
-        std::vector<Projectile> projectiles;
         float projectileSpeed = 3.0f;
 
     public:
-        Weapon(float _width, float _height, Vector2 _offset){
+        Weapon(float _width, float _height, Vector2 _offset)
+        {
             width = _width;
             height = _height;
             offset = _offset;
         }
 
-        void update(Vector2 playerPos, float playerRotation) {
+        void update(Vector2 playerPos, float playerRotation)
+        {
             // Rotate the offset according to the player's rotation
             Vector2 rotatedOffset = Vector2Rotate(offset, playerRotation * DEG2RAD);
 
@@ -112,31 +138,37 @@ class Weapon
             Vector2 frontEndPos = Vector2Add(pos, Vector2Rotate(frontEndOffset, rotation * DEG2RAD));
 
             // Shot projectile when mouse button is pressed
-            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
                 // Calculate the direction of the projectile based on the weapon's rotation
                 float projectileDirection = rotation;
 
                 // Create the projectile object with its position set to the front end of the weapon
                 // and its velocity determined by the direction of fire
-                projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed));
+                projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed, 3));
             }
 
             // Update all projectiles
-            auto it = projectiles.begin();
-            while (it != projectiles.end()) {
-                it->update();
-                if (!it->IsAlive()) {
-                    it = projectiles.erase(it); // Remove projectile if its lifetime has expired
-                } else {
-                    ++it;
+            auto projectileIt = projectiles.begin();
+            while (projectileIt != projectiles.end())
+            {
+                projectileIt->update();
+                if (!projectileIt->IsAlive())
+                {
+                    projectileIt = projectiles.erase(projectileIt); // Remove projectile if its lifetime has expired
+                }
+                else
+                {
+                    ++projectileIt;
                 }
             }
         }
 
-        void draw() {
+        void draw()
+        {
             // Draw the weapon at its position
             DrawTexturePro(weaponTex[0], Rectangle {0, 0, width, height}, {pos.x, pos.y, width, height}, {width / 2, height / 2}, rotation, RAYWHITE);
-        
+
             // Draw all projectiles
             for (const auto& projectile : projectiles) {
                 projectile.draw();
@@ -165,13 +197,14 @@ class Player : public Entity
     private:
     int sprintEnergy = 900;
     float sprintSpeed = 5.0f;
-    float normalSpeed = 1.0f;
+    float normalSpeed = 2.5f;
     bool isSprinting = false;
     float rotation = 0.0f;
     float size = 80.0f;
 
     public:
-    Player(Vector2 _pos) {
+    Player(Vector2 _pos)
+    {
         pos = _pos;
     }
 
@@ -245,7 +278,53 @@ class Player : public Entity
 
 class Zombie : public Entity
 {
+    private:
+    float speed = 1.0f;
+    float rotation;
+    Vector2 dir;
+    Vector2 playerPos;
+
+    public:
+    Zombie(Vector2 _pos, float _size)
+    {
+        pos = _pos;
+        size = _size;
+    }
+
+    void update() override
+    {
+        // Zombie facing and rotation
+        Vector2 dir = { playerPos.x - pos.x, playerPos.y - pos.y };
+        rotation = atan2f(dir.y, dir.x) * RAD2DEG;
+
+        // Zombie movement
+        dir.x = cosf(rotation * DEG2RAD) * speed;
+        dir.y = sinf(rotation * DEG2RAD) * speed;
+
+        pos = Vector2Add(pos, dir);
+    }
+
+    void draw() override
+    {
+        DrawTexturePro(zombieTex[0], Rectangle {0, 0, size, size}, {pos.x, pos.y, size, size}, {size / 2, size / 2}, rotation, RAYWHITE);
+    }
+
+    void setPlayerPos(Vector2 _playerPos)
+    {
+        playerPos = _playerPos;
+    }
+
+    Circle getCircle()
+    {
+        Circle c;
+        c.pos = pos;
+        c.radius = size / 2.0f;
+        return c;
+    }
 };
+
+// Dynamic array to contain all existing zombies in the game
+std::vector<Zombie> zombies;
 
 // Functions
 
@@ -254,8 +333,8 @@ void WindowSetup()
     display = GetCurrentMonitor();
     displayWidth = 800;
     displayHeight = 450;
-    displayWidth = GetMonitorWidth(display);
-    displayHeight = GetMonitorHeight(display);
+    //displayWidth = GetMonitorWidth(display);
+    //displayHeight = GetMonitorHeight(display);
 }
 
 int GetDisplayWidth()
@@ -295,24 +374,28 @@ void UpdateCamera(Player player)
 void LoadAllImage()
 {
     playerImg = LoadImage("../graphics/earth.png");
+    zombieImg[0] = LoadImage("../graphics/moon.png");
     weaponImg[0] = LoadImage("../graphics/baguette.png");
 }
 
 void ResizeAllImage()
 {
     ImageResize(&playerImg, playerSize, playerSize);
+    ImageResize(&zombieImg[0], zombieSize, zombieSize);
     ImageResize(&weaponImg[0], weaponWidth, weaponHeight);
 }
 
 void LoadAllTexture()
 {
     playerTex = LoadTextureFromImage(playerImg);
+    zombieTex[0] = LoadTextureFromImage(zombieImg[0]);
     weaponTex[0] = LoadTextureFromImage(weaponImg[0]);
 }
 
 void UnloadAllImage()
 {
     UnloadImage(playerImg);
+    UnloadImage(zombieImg[0]);
     UnloadImage(weaponImg[0]);
 }
 
@@ -332,6 +415,67 @@ void TextureSetup()
     UnloadAllImage();
 }
 
+void ProjectilesHandling()
+{
+    // Check projectiles collision with zombies
+    auto projectileIt = projectiles.begin();
+    auto zombieIt = zombies.begin();
+    while (projectileIt!= projectiles.end()) {
+        while (zombieIt!= zombies.end()) {
+            Circle projectileCircle = { projectileIt->getPosition(), projectileIt->getSize() / 2.0f };
+            Circle zombieCircle = zombieIt->getCircle();
+            if (CheckCollisionCircles(projectileCircle.pos, projectileCircle.radius, zombieCircle.pos, zombieCircle.radius))
+            {
+                zombieIt = zombies.erase(zombieIt);
+                projectileIt = std::find_if(projectiles.begin(), projectiles.end(), [projectileIt](const Projectile& p) { return &p == projectileIt.operator->(); });
+                if (projectileIt!= projectiles.end()) {
+                    projectiles.erase(projectileIt);
+                }
+                std::cout << "HIT" << '\n';
+                break;
+            }
+            else
+            {
+                ++zombieIt;
+            }
+        }
+        if (projectileIt!= projectiles.end()) {
+            ++projectileIt;
+        }
+    }
+}
+
+void ZombiesUpdate(Player& player)
+{
+    auto zombieIt = zombies.begin();
+    while (zombieIt != zombies.end())
+    {
+        zombieIt->setPlayerPos(player.getPos());
+        zombieIt->update();
+
+        // Check if the zombie is within the player's circle
+        Circle zombieCircle = zombieIt->getCircle();
+        Circle playerCircle = { player.getPos(), player.getSize() / 2.0f };
+        if (CheckCollisionCircles(playerCircle.pos, playerCircle.radius, zombieCircle.pos, zombieCircle.radius))
+        {
+            // Game over
+            std::cout << "Game Over" << std::endl;
+        }
+
+        ++zombieIt;
+    }
+}
+
+void ZombiesDrawing()
+{
+    auto zombieIt = zombies.begin();
+    while (zombieIt != zombies.end())
+    {
+        zombieIt->draw();
+        ++zombieIt;
+    }
+}
+
 int main()
 {
     // Window setup
@@ -345,8 +489,9 @@ int main()
     //ToggleFullscreen();
 
     // World Position
-    std::cout << displayWidth << ' ' << displayHeight << '\n';
-    worldPos = Vector2{float(GetDisplayWidth()) / 2, float(GetDisplayHeight()) / 2};
+    //std::cout << displayWidth << ' ' << displayHeight << '\n';
+    worldPos = Vector2{displayWidth / 2.0f, displayHeight / 2.0f};
+    //worldPos = Vector2{float(GetDisplayWidth()) / 2, float(GetDisplayHeight()) / 2};
     startingPos = worldPos;
 
     // Texture Setup
@@ -356,19 +501,27 @@ int main()
     SetTargetFPS(60);
 
     Player player({ GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f });
+    Zombie zombie({ GetScreenWidth() / 2.0f + 80.0f, GetScreenHeight() / 2.0f + 80.0f}, 80.0f);
+    zombies.push_back(zombie);
     Weapon weapon(80.0f, 20.0f, {player.getSize(), player.getSize()});
     int cnt = 0;
 
     // Game loop
     while (!WindowShouldClose())        // While the window is still open
     {
-        ClearBackground(RAYWHITE);
+        ClearBackground(GREEN);
 
         // Update player
         player.update();
 
         // Update weapon
         weapon.update(player.getPos(), player.getRotation());
+
+        // Update zombie based on player position
+        ZombiesUpdate(player);
+
+        // Handle projectile
+        ProjectilesHandling();
 
         Vector2 mousePos = GetMousePosition();
         if(cnt == 60) {
@@ -378,7 +531,6 @@ int main()
             cnt = 0;
         }
         cnt += 1;
-        
 
         // Update camera
         UpdateCamera(player);
@@ -399,6 +551,8 @@ int main()
             player.draw();
 
             weapon.draw();
+
+            ZombiesDrawing();
 
             EndMode2D();
             //-----------------------------------------------------------------------------------------------
