@@ -109,8 +109,11 @@ class Weapon
         Vector2 pos;
         float rotation;
         float width, height;     
-
+        int maxAmmo = 30;
+        int curAmmo = 30;
         float projectileSpeed = 3.0f;
+        bool isReloading = false;
+        int reloadInterval = 0;
 
     public:
         Weapon(float _width, float _height, Vector2 _offset)
@@ -119,6 +122,10 @@ class Weapon
             height = _height;
             offset = _offset;
         }
+
+        int getMaxAmmo() { return maxAmmo; }
+        int getCurAmmo() { return curAmmo; }
+        bool getIsReloading() { return isReloading; }
 
         void update(Vector2 playerPos, float playerRotation)
         {
@@ -138,7 +145,7 @@ class Weapon
             Vector2 frontEndPos = Vector2Add(pos, Vector2Rotate(frontEndOffset, rotation * DEG2RAD));
 
             // Shot projectile when mouse button is pressed
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !isReloading && curAmmo > 0)
             {
                 // Calculate the direction of the projectile based on the weapon's rotation
                 float projectileDirection = rotation;
@@ -146,6 +153,29 @@ class Weapon
                 // Create the projectile object with its position set to the front end of the weapon
                 // and its velocity determined by the direction of fire
                 projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed, 3));
+
+                curAmmo -= 1;
+            }
+
+            // Reload ammo when R button is pressed
+            if (IsKeyPressed(KEY_R) && curAmmo < maxAmmo)
+            {
+                isReloading = true;
+                curAmmo = 0;
+            }
+
+            if (isReloading)
+            {
+                if(reloadInterval >= 120)
+                {
+                    reloadInterval = 0;
+                    curAmmo = maxAmmo;
+                    isReloading = false;
+                }
+                else
+                {
+                    reloadInterval += 1;
+                }
             }
 
             // Update all projectiles
@@ -501,8 +531,12 @@ int main()
     SetTargetFPS(60);
 
     Player player({ GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f });
-    Zombie zombie({ GetScreenWidth() / 2.0f + 80.0f, GetScreenHeight() / 2.0f + 80.0f}, 80.0f);
-    zombies.push_back(zombie);
+    Zombie zombie1({ GetScreenWidth() / 2.0f + 80.0f, GetScreenHeight() / 2.0f + 80.0f}, 80.0f);
+    Zombie zombie2({ GetScreenWidth() / 2.0f - 80.0f, GetScreenHeight() / 2.0f - 80.0f}, 80.0f);
+    Zombie zombie3({ GetScreenWidth() / 2.0f + 80.0f, GetScreenHeight() / 2.0f - 80.0f}, 80.0f);
+    zombies.push_back(zombie1);
+    zombies.push_back(zombie2);
+    zombies.push_back(zombie3);
     Weapon weapon(80.0f, 20.0f, {player.getSize(), player.getSize()});
     int cnt = 0;
 
@@ -528,6 +562,13 @@ int main()
             std::cout << "Mouse : " << mousePos.x << ' ' << mousePos.y << '\n';
             std::cout << "Player: " << player.getPosX() << ' ' << player.getPosY() << '\n';
             std::cout << "World : " << worldPos.x << ' ' << worldPos.y << '\n';
+
+            auto it = zombies.begin();
+            while(it != zombies.end())
+            {
+                std::cout << it->getPosX() << ' ' << it->getPosY() << '\n';
+                ++it;
+            }
             cnt = 0;
         }
         cnt += 1;
@@ -557,9 +598,16 @@ int main()
             EndMode2D();
             //-----------------------------------------------------------------------------------------------
 
-        DrawText("FURINA BEST GIRLLLLLLLL", 0, 0, 30, BLUE);
+        DrawText("Black Friday", 0, 0, 30, BLUE);
 
         DrawText(TextFormat("Energy: %d%", player.getSprintEnergy() / 9), 0, 30, 30, BLACK);
+
+        DrawText(TextFormat("Ammo: %d/%d%", weapon.getCurAmmo(), weapon.getMaxAmmo()), 0, 60, 30, BLACK);
+
+        if(weapon.getIsReloading())
+        {
+            DrawText("RELOADING", 0, 90, 30, BLACK);
+        }
 
         EndDrawing();
         //----------------------------------------------------------------------------------
