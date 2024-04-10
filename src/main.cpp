@@ -21,8 +21,13 @@ int displayWidth;                 // max window width
 int displayHeight;                // max window height
 int playerSize = 80;
 int zombieSize = 80;
+int sateliteSize = 60;
+int sateliteRotationSpeed = 5;
+int sateliteDist = 40;
 int weaponWidth = 80;
 int weaponHeight = 20;
+int bgWidth = 6000;
+int bgHeight = 4000;
 
 Vector2 worldPos;
 Vector2 startingPos;
@@ -36,9 +41,13 @@ Vector2 cameraTarget;
 Image playerImg;
 Image zombieImg[10];
 Image weaponImg[20];
+Image sateliteImg;
+Image bgImg;
 Texture2D playerTex;
 Texture2D zombieTex[10];
 Texture2D weaponTex[20];
+Texture2D sateliteTex;
+Texture2D bgTex;
 Sound weaponSound[20];
 
 // Struct
@@ -87,7 +96,7 @@ class Projectile
         void draw() const
         {
             // Draw the projectile at its position
-            DrawCircleV(pos, size, BLACK);
+            DrawCircleV(pos, size, BROWN);
         }
 
         Vector2 getPosition() const
@@ -117,7 +126,7 @@ class Weapon
         int reloadInterval = 0;
         int reloadIntervalDuration = 120;
         int shootInterval = 0;
-        int shootIntervalDuration = 6;
+        int shootIntervalDuration = 30;
 
     public:
         Weapon(float _width, float _height, Vector2 _offset)
@@ -241,7 +250,7 @@ class Player : public Entity
     private:
     int sprintEnergy = 900;
     float sprintSpeed = 5.0f;
-    float normalSpeed = 2.5f;
+    float normalSpeed = 25.0f;
     bool isSprinting = false;
     float rotation = 0.0f;
     float size = 80.0f;
@@ -286,25 +295,37 @@ class Player : public Entity
         // Left Right Movement
         if(IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))
         {
-            pos.x -= speed;
-            worldPos.x -= speed;
+            if(pos.x > -6000.0f)
+            {
+                pos.x -= speed;
+                worldPos.x -= speed;
+            }
         }
         else if(IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D))
         {
-            pos.x += speed;
-            worldPos.x += speed;
+            if(pos.x < 6000.0f)
+            {
+                pos.x += speed;
+                worldPos.x += speed;
+            }
         }
         
         // Up Down Movement
         if(IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))
         {
-            pos.y -= speed;
-            worldPos.y -= speed;
+            if(pos.y > -4000.0f)
+            {   
+                pos.y -= speed;
+                worldPos.y -= speed;
+            }
         }
         else if(IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S))
         {
-            pos.y += speed;
-            worldPos.x += speed;
+            if(pos.y < 4000.0f)
+            {
+                pos.y += speed;
+                worldPos.x += speed;
+            }
         }
 
         // Player facing and rotation
@@ -370,6 +391,62 @@ class Zombie : public Entity
 // Dynamic array to contain all existing zombies in the game
 std::vector<Zombie> zombies;
 
+class Satelite {
+    private:
+        int speedX, speedY;
+        float radius = 60.0f;
+        Vector2 position;
+        Color color;
+        Player* parent;
+        int dist;
+        int angle = 0;
+
+    public:
+        Satelite(int _speedX, int _speedY, Player* _parent){
+            speedX = _speedX;
+            speedY = _speedY;
+            parent = _parent;
+            position = parent->getPos();
+            dist = abs(radius + sateliteDist + _parent->getSize());
+        }
+        
+        float getRadius() { return radius; }
+
+        void update() {
+            // Satelite rotation movement
+            position.x = parent->getPosX() + dist*cos(angle * PI / 180);
+            position.y = parent->getPosY() - dist*sin(angle * PI / 180);
+            angle += 2;
+            if(angle >= 360)
+            {
+                angle = 0;
+            }
+
+            // Check for collision with zombies
+            auto zombieIt = zombies.begin();
+            Circle sateliteCircle = { position, radius / 2 };
+            while(zombieIt != zombies.end())
+            {
+                Circle zombieCircle = zombieIt->getCircle();
+                if (CheckCollisionCircles(sateliteCircle.pos, sateliteCircle.radius, zombieCircle.pos, zombieCircle.radius))
+                {
+                    zombieIt = zombies.erase(zombieIt);
+                    std::cout << "HIT" << '\n';
+                }
+                else
+                {
+                    ++zombieIt;
+                }
+            }
+        }
+
+        void draw()
+        {
+            //DrawCircle(position.x, position.y, radius / 2, WHITE);
+            DrawTexture(sateliteTex, position.x - radius / 2, position.y - radius / 2, WHITE);
+        }
+};
+
 // Functions
 
 void WindowSetup()
@@ -425,6 +502,8 @@ void LoadAllImage()
     playerImg = LoadImage("../graphics/earth.png");
     zombieImg[0] = LoadImage("../graphics/moon.png");
     weaponImg[0] = LoadImage("../graphics/baguette.png");
+    sateliteImg = LoadImage("../graphics/moon.png");
+    bgImg = LoadImage("../graphics/spaceBg.png");
 }
 
 void ResizeAllImage()
@@ -432,6 +511,8 @@ void ResizeAllImage()
     ImageResize(&playerImg, playerSize, playerSize);
     ImageResize(&zombieImg[0], zombieSize, zombieSize);
     ImageResize(&weaponImg[0], weaponWidth, weaponHeight);
+    ImageResize(&sateliteImg, sateliteSize, sateliteSize);
+    ImageResize(&bgImg, bgWidth, bgHeight);
 }
 
 void LoadAllTexture()
@@ -439,6 +520,8 @@ void LoadAllTexture()
     playerTex = LoadTextureFromImage(playerImg);
     zombieTex[0] = LoadTextureFromImage(zombieImg[0]);
     weaponTex[0] = LoadTextureFromImage(weaponImg[0]);
+    sateliteTex = LoadTextureFromImage(sateliteImg);
+    bgTex = LoadTextureFromImage(bgImg);
 }
 
 void UnloadAllImage()
@@ -446,6 +529,7 @@ void UnloadAllImage()
     UnloadImage(playerImg);
     UnloadImage(zombieImg[0]);
     UnloadImage(weaponImg[0]);
+    UnloadImage(bgImg);
 }
 
 void TextureSetup()
@@ -477,7 +561,7 @@ void ProjectilesHandling()
             {
                 zombieIt = zombies.erase(zombieIt);
                 projectileIt = std::find_if(projectiles.begin(), projectiles.end(), [projectileIt](const Projectile& p) { return &p == projectileIt.operator->(); });
-                if (projectileIt!= projectiles.end()) {
+                if (projectileIt != projectiles.end()) {
                     projectiles.erase(projectileIt);
                 }
                 std::cout << "HIT" << '\n';
@@ -555,14 +639,18 @@ int main()
     // Set Game FPS (frame per second)
     SetTargetFPS(60);
 
-    Player player({ GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f });
+    Player player({ 0, 0 });
+    
     Zombie zombie1({ GetScreenWidth() / 2.0f + 80.0f, GetScreenHeight() / 2.0f + 80.0f}, 80.0f);
     Zombie zombie2({ GetScreenWidth() / 2.0f - 80.0f, GetScreenHeight() / 2.0f - 80.0f}, 80.0f);
     Zombie zombie3({ GetScreenWidth() / 2.0f + 80.0f, GetScreenHeight() / 2.0f - 80.0f}, 80.0f);
     zombies.push_back(zombie1);
     zombies.push_back(zombie2);
     zombies.push_back(zombie3);
+    
     Weapon weapon(80.0f, 20.0f, {player.getSize(), player.getSize()});
+    Weapon weapon1(80.0f, 20.0f, {player.getSize(), -player.getSize()});
+    Satelite satelite(sateliteRotationSpeed, sateliteRotationSpeed, &player);
     int cnt = 0;
 
     // Game loop
@@ -573,8 +661,12 @@ int main()
         // Update player
         player.update();
 
+        // Update satelite
+        satelite.update();
+
         // Update weapon
         weapon.update(player.getPos(), player.getRotation());
+        weapon1.update(player.getPos(), player.getRotation());
 
         // Update zombie based on player position
         ZombiesUpdate(player);
@@ -583,6 +675,7 @@ int main()
         ProjectilesHandling();
 
         Vector2 mousePos = GetMousePosition();
+        // Debugging purpose
         if(cnt == 60) {
             std::cout << "Mouse : " << mousePos.x << ' ' << mousePos.y << '\n';
             std::cout << "Player: " << player.getPosX() << ' ' << player.getPosY() << '\n';
@@ -619,11 +712,24 @@ int main()
             //-----------------------------------------------------------------------------------------------
             BeginMode2D(camera);
 
-            DrawRectangle(GetDisplayWidth() / 2, GetDisplayHeight() / 2, 10, 10, RED);
+            // Draw background
+            // Top left corner
+            DrawTexture(bgTex, -6000, 0, GRAY);
+            // Bottom left corner
+            DrawTexture(bgTex, -6000, -4000, GRAY);
+            // Top right corner
+            DrawTexture(bgTex, 0, 0, GRAY);
+            // Bottom right corner
+            DrawTexture(bgTex, 0, -4000, GRAY);
+
+            DrawRectangle(0, 0, 100, 100, RED);
 
             player.draw();
 
+            satelite.draw();
+
             weapon.draw();
+            weapon1.draw();
 
             ZombiesDrawing();
 
@@ -632,13 +738,13 @@ int main()
 
         DrawText("Black Friday", 0, 0, 30, BLUE);
 
-        DrawText(TextFormat("Energy: %d%", player.getSprintEnergy() / 9), 0, 30, 30, BLACK);
+        DrawText(TextFormat("Energy: %d%", player.getSprintEnergy() / 9), 0, 30, 30, WHITE);
 
-        DrawText(TextFormat("Ammo: %d/%d%", weapon.getCurAmmo(), weapon.getMaxAmmo()), 0, 60, 30, BLACK);
+        DrawText(TextFormat("Ammo: %d/%d%", weapon.getCurAmmo(), weapon.getMaxAmmo()), 0, 60, 30, WHITE);
 
         if(weapon.getIsReloading())
         {
-            DrawText("RELOADING", 0, 90, 30, BLACK);
+            DrawText("RELOADING", 0, 90, 30, WHITE);
         }
 
         EndDrawing();
