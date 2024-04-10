@@ -19,6 +19,8 @@ Project Black Friday
 int display;                      // current window display
 int displayWidth;                 // max window width
 int displayHeight;                // max window height
+
+// Objects
 int playerSize = 80;
 int zombieSize = 80;
 int sateliteSize = 60;
@@ -28,6 +30,10 @@ int weaponWidth = 80;
 int weaponHeight = 20;
 int bgWidth = 6000;
 int bgHeight = 4000;
+
+bool inGame = true;
+int waveNum = 1;
+int zombiesNum = 5;
 
 Vector2 worldPos;
 Vector2 startingPos;
@@ -609,6 +615,53 @@ void ZombiesDrawing()
     }
 }
 
+Vector2 GenerateRandomPos(Vector2 playerPos) {
+    Vector2 pos;
+    
+    // Random decider for left or right
+    int lr = GetRandomValue(0, 1);
+    if(lr == 0) // Left
+    {
+        pos.x = float(GetRandomValue(playerPos.x - 2000, playerPos.x - 600));
+    }
+    else        // Right
+    {
+        pos.x = float(GetRandomValue(playerPos.x + 600, playerPos.x + 2000));
+    }
+
+    // Random decider for top or bottom
+    int tb = GetRandomValue(0, 1);
+    if(tb == 0) // Top
+    {
+        pos.y = float(GetRandomValue(playerPos.y - 2000, playerPos.y - 600));
+    }
+    else        // Bottom
+    {
+        pos.y = float(GetRandomValue(playerPos.y + 600, playerPos.y + 2000));
+    }
+
+    return pos;
+}
+
+void GameManager(Vector2 playerPos)
+{
+    // If all current zombies eliminated, start a new wave
+    if(zombies.size() == 0)
+    {
+        waveNum += 1;
+        zombiesNum += 5;
+
+        // Spawn zombies in random location near player
+        for(int i = 0; i < zombiesNum; i++)
+        {
+            Vector2 randomPos = GenerateRandomPos(playerPos);
+            float randomSize = float(GetRandomValue(60, 80));
+            Zombie zombie(randomPos, randomSize);
+            zombies.push_back(zombie);
+        }
+    }
+}
+
 int main()
 {
     // Window setup
@@ -656,7 +709,10 @@ int main()
     // Game loop
     while (!WindowShouldClose())        // While the window is still open
     {
-        ClearBackground(GREEN);
+        ClearBackground(BLACK);
+
+        // Manage the wave
+        GameManager(player.getPos());
 
         // Update player
         player.update();
@@ -736,7 +792,7 @@ int main()
             EndMode2D();
             //-----------------------------------------------------------------------------------------------
 
-        DrawText("Black Friday", 0, 0, 30, BLUE);
+        DrawText(TextFormat("Wave: %d%", waveNum), 0, 0, 30, WHITE);
 
         DrawText(TextFormat("Energy: %d%", player.getSprintEnergy() / 9), 0, 30, 30, WHITE);
 
