@@ -39,6 +39,7 @@ Image weaponImg[20];
 Texture2D playerTex;
 Texture2D zombieTex[10];
 Texture2D weaponTex[20];
+Sound weaponSound[20];
 
 // Struct
 struct Circle
@@ -114,6 +115,9 @@ class Weapon
         float projectileSpeed = 3.0f;
         bool isReloading = false;
         int reloadInterval = 0;
+        int reloadIntervalDuration = 120;
+        int shootInterval = 0;
+        int shootIntervalDuration = 6;
 
     public:
         Weapon(float _width, float _height, Vector2 _offset)
@@ -145,7 +149,7 @@ class Weapon
             Vector2 frontEndPos = Vector2Add(pos, Vector2Rotate(frontEndOffset, rotation * DEG2RAD));
 
             // Shot projectile when mouse button is pressed
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !isReloading && curAmmo > 0)
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !isReloading && curAmmo > 0 && shootInterval >= shootIntervalDuration)
             {
                 // Calculate the direction of the projectile based on the weapon's rotation
                 float projectileDirection = rotation;
@@ -154,8 +158,17 @@ class Weapon
                 // and its velocity determined by the direction of fire
                 projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed, 3));
 
+                // Reduce ammo by 1
                 curAmmo -= 1;
+
+                // Play weapon sound effect
+                PlaySound(weaponSound[0]);
+
+                // Restart the shoot interval
+                shootInterval = 0;
             }
+
+            shootInterval += 1;
 
             // Reload ammo when R button is pressed
             if (IsKeyPressed(KEY_R) && curAmmo < maxAmmo)
@@ -164,9 +177,10 @@ class Weapon
                 curAmmo = 0;
             }
 
+            // If it is reloading, then start increasing the ammo
             if (isReloading)
             {
-                if(reloadInterval >= 120)
+                if(reloadInterval >= reloadIntervalDuration)
                 {
                     reloadInterval = 0;
                     curAmmo = maxAmmo;
@@ -401,6 +415,11 @@ void UpdateCamera(Player player)
     camera.offset = { GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f };
 }
 
+void LoadAllSound()
+{
+    weaponSound[0] = LoadSound("../audios/weapon0.wav");
+}
+
 void LoadAllImage()
 {
     playerImg = LoadImage("../graphics/earth.png");
@@ -449,10 +468,10 @@ void ProjectilesHandling()
 {
     // Check projectiles collision with zombies
     auto projectileIt = projectiles.begin();
-    auto zombieIt = zombies.begin();
     while (projectileIt!= projectiles.end()) {
+        auto zombieIt = zombies.begin();
         while (zombieIt!= zombies.end()) {
-            Circle projectileCircle = { projectileIt->getPosition(), projectileIt->getSize() / 2.0f };
+            Circle projectileCircle = { projectileIt->getPosition(), projectileIt->getSize() / 2 };
             Circle zombieCircle = zombieIt->getCircle();
             if (CheckCollisionCircles(projectileCircle.pos, projectileCircle.radius, zombieCircle.pos, zombieCircle.radius))
             {
@@ -518,6 +537,9 @@ int main()
     InitWindow(displayWidth, displayHeight, "Raylib - Black Friday");
     //ToggleFullscreen();
 
+    // Initialize audio device
+    InitAudioDevice();
+
     // World Position
     //std::cout << displayWidth << ' ' << displayHeight << '\n';
     worldPos = Vector2{displayWidth / 2.0f, displayHeight / 2.0f};
@@ -526,6 +548,9 @@ int main()
 
     // Texture Setup
     TextureSetup();
+
+    // Load all audios
+    LoadAllSound();
 
     // Set Game FPS (frame per second)
     SetTargetFPS(60);
@@ -566,8 +591,15 @@ int main()
             auto it = zombies.begin();
             while(it != zombies.end())
             {
-                std::cout << it->getPosX() << ' ' << it->getPosY() << '\n';
+                std::cout << "Zombie: " << it->getPosX() << ' ' << it->getPosY() << '\n';
                 ++it;
+            }
+
+            auto at = projectiles.begin();
+            while(at != projectiles.end())
+            {
+                std::cout << "Projectile: " << at->getPosition().x << ' ' << at->getPosition().y << '\n';
+                ++at;
             }
             cnt = 0;
         }
