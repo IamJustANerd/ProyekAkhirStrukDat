@@ -21,28 +21,42 @@ int displayWidth;                 // max window width
 int displayHeight;                // max window height
 
 // Objects
+// Player
 int playerSize = 80;
+
+// Zombie
 int zombieSize = 80;
+
+// Satelite
 int sateliteSize = 60;
-int sateliteRotationSpeed = 5;
+int sateliteRotationSpeed = 2;
 int sateliteDist = 40;
+int sateliteUpCount = 0;
+int sateliteLevel = 10;
+
+// Weapon
 int weaponWidth = 80;
 int weaponHeight = 20;
-int bgWidth = 6000;
-int bgHeight = 4000;
-int buffSize = 60;
-
-bool inGame = true;
-int waveNum = 9;
-int zombiesNum = 0;
-int zombiesLevel = 0;
-
-// Weapon and satelite upgrade
 int weaponUpCount = 1;
 int weaponLevel = 1;
 int weaponTier = 1;
-int sateliteUpCount = 0;
-int sateliteLevel = 0;
+
+// Buff
+int buffSize = 60;
+bool isBuffActive[5];
+int buffCnt[5] = {0, 0, 0, 0, 0};
+// 60 = 1 second
+int buffDuration[5] = {18000, 18000, 18000, 18000, 18000};
+
+// Background
+int bgWidth = 6000;
+int bgHeight = 4000;
+
+// Game manager
+bool inGame = true;
+int waveNum = 0;
+int zombiesNum = 0;
+int zombiesLevel = 1;
 
 // Debugging purpose
 Vector2 worldPos;
@@ -60,16 +74,20 @@ Image weaponImg[20];
 Image sateliteImg;
 Image bgImg;
 Image buffImg[20];
+Image iconImg[20];
 Texture2D playerTex;
 Texture2D zombieTex[20];
 Texture2D weaponTex[20];
 Texture2D sateliteTex;
 Texture2D bgTex;
 Texture2D buffTex[20];
+Texture2D iconTex[20];
 Sound weaponSound[20];
 
 // Level based on color (for weapons, satelite, and enemies)
-Color level[10] = {
+Color transparent = {0, 0, 0, 0};
+Color level[11] = {
+    transparent,// 0
     RAYWHITE,   // 1
     RED,        // 2
     ORANGE,     // 3
@@ -145,7 +163,7 @@ class Projectile
 
         int getDamage() const
         {
-            return damage;
+            return damage * weaponLevel * weaponTier;
         }
 };
 
@@ -207,7 +225,10 @@ class Weapon
                 projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed, 2, 3));
 
                 // Reduce ammo by 1
-                curAmmo -= 1;
+                if(!isBuffActive[0])
+                {
+                    curAmmo -= 1;
+                }
 
                 // Play weapon sound effect
                 PlaySound(weaponSound[0]);
@@ -259,7 +280,7 @@ class Weapon
         void draw()
         {
             // Draw the weapon at its position
-            DrawTexturePro(weaponTex[0], Rectangle {0, 0, width, height}, {pos.x, pos.y, width, height}, {width / 2, height / 2}, rotation, RAYWHITE);
+            DrawTexturePro(weaponTex[0], Rectangle {0, 0, width, height}, {pos.x, pos.y, width, height}, {width / 2, height / 2}, rotation, level[weaponLevel]);
 
             // Draw all projectiles
             for (const auto& projectile : projectiles) {
@@ -277,9 +298,9 @@ class LootBox
     int item;
     /*
     Item list:
-    0 - (Fire icon) - Infinity ammo and increase firing speed by 2.0x. Both lasts for 30 seconds.
+    0 - (Fire icon) - Infinity ammo, lasts for 30 seconds.
     1 - (Moon icon) - Gain satelite. Only one satelite can exist at the same time. Gaining more will increase its level
-        by 1, up to level 10 (golden colour). Each level increase its damage by 2. Won't appear if already maxed.
+        by 1, up to level 10 (golden colour). Each level increase its damage by 2. Taking another buff will only increase its speed
     2 - (Baguette bucket icon) Upgrade current weapon level by 1. Each level increase its damage by 2. Reaching level 10 will
         unlock a new weapon (from tier 1 up to tier 5). Won't appear if already maxed.
         Tier 1: short baguette, no auto
@@ -300,18 +321,23 @@ class LootBox
         item = _item;
     }
 
-    int cnt = 0;
+    Vector2 getPos() { return pos; }
+    float getSize() { return size; }
 
     void draw()
     {
-        if(cnt == 60)
-        {
-            std::cout << pos.x << ' ' << pos.y << '\n';
-            cnt = 0;
-        }
-        cnt += 1;
         DrawTexturePro(buffTex[item], Rectangle {0, 0, size, size}, {pos.x, pos.y, size, size}, {size / 2, size / 2}, 0, RAYWHITE);
     }
+
+    Circle getCircle()
+    {
+        Circle c;
+        c.pos = pos;
+        c.radius = size / 2.0f;
+        return c;
+    }
+
+    int getType() { return item; }
 };
 
 std::vector<LootBox> lootBoxes;
@@ -361,11 +387,15 @@ class Player : public Entity
         {
             isSprinting = true;
         }
-        
+
         if(isSprinting && sprintEnergy > 0)
         {
             speed = sprintSpeed;
-            sprintEnergy -= 6;
+            
+            if(!isBuffActive[4])
+            {
+                sprintEnergy -= 6;
+            }   
         }
         else
         {
@@ -432,7 +462,7 @@ class Player : public Entity
 class Zombie : public Entity
 {
     private:
-    float speed = 1.0f + (0.1f * zombiesLevel);
+    float speed = 3.0f + (0.1f * zombiesLevel);
     float rotation;
     Vector2 dir;
     Vector2 playerPos;
@@ -453,12 +483,12 @@ class Zombie : public Entity
 
         if(type == 0) // Normal zombie
         {
-            health = 5 * (zombiesLevel + 1);
+            health = 5 * zombiesLevel;
             maxHealth = health;
         }
         else if(type == 1) // Lootbox zombie
         {
-            health = 10 * (zombiesLevel + 1);
+            health = 10 * zombiesLevel;
             maxHealth = health;
         }
         else if(type == 2) // Boss zombie
@@ -483,6 +513,13 @@ class Zombie : public Entity
         // Zombie movement
         dir.x = cosf(rotation * DEG2RAD) * speed;
         dir.y = sinf(rotation * DEG2RAD) * speed;
+
+        // If slow debuff is active, reduce movement speed by 50%
+        if(isBuffActive[3])
+        {
+            dir.x /= 2;
+            dir.y /= 2;
+        }
 
         pos = Vector2Add(pos, dir);
 
@@ -535,10 +572,27 @@ void ZombieDrop(Vector2 zombiePos, int type)
         {
             item = GetRandomValue(0, 4);
             // If satelite upgrade is maxed, change buff
-            if(item == 1 && sateliteUpCount >= 10) continue;
+            if(item == 1 && sateliteUpCount >= 10)
+            {
+                continue;
+            }
             // If baguette upgrade is maxed, change buff
-            else if(item == 2 && weaponUpCount >= 50) continue;
-            else break;
+            if(item == 2 && weaponUpCount >= 50)
+            {
+                continue;
+            }
+            else
+            {
+                if(item == 1)
+                {
+                    sateliteUpCount += 1;
+                }
+                else if(item == 2)
+                {
+                    weaponUpCount += 1;
+                }
+                break;
+            }
         }
 
         LootBox lootBox(zombiePos, item);
@@ -549,7 +603,6 @@ void ZombieDrop(Vector2 zombiePos, int type)
 
 class Satelite {
     private:
-        int speedX, speedY;
         float radius = 60.0f;
         Vector2 position;
         Color color;
@@ -559,9 +612,7 @@ class Satelite {
         int damage = 2;
 
     public:
-        Satelite(int _speedX, int _speedY, Player* _parent){
-            speedX = _speedX;
-            speedY = _speedY;
+        Satelite(Player* _parent){
             parent = _parent;
             position = parent->getPos();
             dist = abs(radius + sateliteDist + _parent->getSize());
@@ -573,7 +624,7 @@ class Satelite {
             // Satelite rotation movement
             position.x = parent->getPosX() + dist*cos(angle * PI / 180);
             position.y = parent->getPosY() - dist*sin(angle * PI / 180);
-            angle += 2;
+            angle += (sateliteRotationSpeed + sateliteLevel);
             if(angle >= 360)
             {
                 angle = 0;
@@ -590,7 +641,7 @@ class Satelite {
                     zombieIt->sateliteHitCd >= zombieIt->getSateliteHitInterval())
                 {
                     // Reduce health
-                    zombieIt->health -= damage;
+                    zombieIt->health -= damage * sateliteLevel;
 
                     // Enter satelite hit cooldown
                     zombieIt->sateliteHitCd = 0;
@@ -606,9 +657,6 @@ class Satelite {
                         
                         zombieIt = zombies.erase(zombieIt);
                     }
-                    
-                    // Debuggin purpose
-                    std::cout << "HIT" << '\n';
                 }
                 else
                 {
@@ -620,7 +668,7 @@ class Satelite {
         void draw()
         {
             //DrawCircle(position.x, position.y, radius / 2, WHITE);
-            DrawTexture(sateliteTex, position.x - radius / 2, position.y - radius / 2, WHITE);
+            DrawTexture(sateliteTex, position.x - radius / 2, position.y - radius / 2, level[sateliteLevel]);
         }
 };
 
@@ -694,6 +742,12 @@ void LoadAllImage()
     buffImg[2] = LoadImage("../graphics/baguetteUpgrade.png");
     buffImg[3] = LoadImage("../graphics/slowDebuff.png");
     buffImg[4] = LoadImage("../graphics/electricBuff.png");
+
+    iconImg[0] = LoadImage("../graphics/fireBuff.png");
+    iconImg[1] = LoadImage("../graphics/moon.png");
+    iconImg[2] = LoadImage("../graphics/baguetteUpgrade.png");
+    iconImg[3] = LoadImage("../graphics/slowDebuff.png");
+    iconImg[4] = LoadImage("../graphics/electricBuff.png");
 }
 
 void ResizeAllImage()
@@ -716,6 +770,12 @@ void ResizeAllImage()
     ImageResize(&buffImg[2], buffSize, buffSize);
     ImageResize(&buffImg[3], buffSize, buffSize);
     ImageResize(&buffImg[4], buffSize, buffSize);
+
+    ImageResize(&iconImg[0], buffSize / 2, buffSize / 2);
+    ImageResize(&iconImg[1], buffSize / 2, buffSize / 2);
+    ImageResize(&iconImg[2], buffSize / 2, buffSize / 2);
+    ImageResize(&iconImg[3], buffSize / 2, buffSize / 2);
+    ImageResize(&iconImg[4], buffSize / 2, buffSize / 2);
 }
 
 void LoadAllTexture()
@@ -736,6 +796,11 @@ void LoadAllTexture()
     for(int i = 0; i < 5; i++)
     {
         buffTex[i] = LoadTextureFromImage(buffImg[i]);
+    }
+
+    for(int i = 0; i < 5; i++)
+    {
+        iconTex[i] = LoadTextureFromImage(iconImg[i]);
     }
 }
 
@@ -839,7 +904,7 @@ void ZombiesUpdate(Player& player)
         if (CheckCollisionCircles(playerCircle.pos, playerCircle.radius, zombieCircle.pos, zombieCircle.radius))
         {
             // Game over
-            std::cout << "Game Over" << std::endl;
+            // std::cout << "Game Over" << std::endl;
         }
 
         ++zombieIt;
@@ -856,9 +921,93 @@ void ZombiesDrawing()
     }
 }
 
-void BuffesUpdate(Vector2 playerPos)
+void BuffesUpdate(Vector2 playerPos, float playerRadius)
 {
-    // Insert buff effect
+    // Check for collision with player
+    auto buffIt = lootBoxes.begin();
+    Circle playerCircle = { playerPos, playerRadius / 2 };
+    while(buffIt != lootBoxes.end())
+    {
+        Circle buffCircle = buffIt->getCircle();
+        // If player collide with buff, take the buff
+        if (CheckCollisionCircles(playerCircle.pos, playerCircle.radius, buffCircle.pos, buffCircle.radius))
+        {
+            // Activate the buff
+            isBuffActive[buffIt->getType()] = true;
+
+            // Turn on the counter
+            buffCnt[buffIt->getType()] = 0;
+
+            // Remove the buff
+            buffIt = lootBoxes.erase(buffIt);
+        }
+        else
+        {
+            ++buffIt;
+        }
+    }
+
+    // Activate buff
+    // 0 - Infinity ammo buff
+    if(isBuffActive[0])
+    {
+        buffCnt[0] += 1;
+        if(buffCnt[0] >= buffDuration[0])
+        {
+            isBuffActive[0] = false;        
+        }
+    }
+    // 1 - Satelite Upgrade
+    if(isBuffActive[1])
+    {
+        // Upgrade satelite level by 1
+        if(sateliteLevel < 10)
+        {
+            sateliteLevel += 1;
+        }
+
+        isBuffActive[1] = false;
+    }
+    // 2 - Weapon Upgrade
+    if(isBuffActive[2])
+    {
+        // Increase weapon level by 1
+        if(weaponLevel < 10)
+        {
+            weaponLevel += 1;
+        }
+
+        // If reaches level 10 and weapon tier is not maxed, upgrade weapon tier
+        // and reset weapon level to 1
+        if(weaponLevel >= 10 && weaponTier < 5)
+        {
+            weaponLevel = 1;
+            weaponTier += 1;
+            curWeapon.erase(curWeapon.begin());
+            // Change weapon ...
+            //curWeapon.push(weapon)
+        }
+
+        isBuffActive[2] = false;
+    }
+    // 3 - Slow Debuff
+    if(isBuffActive[3])
+    {
+        buffCnt[3] += 1;
+        if(buffCnt[3] >= buffDuration[3])
+        {
+            isBuffActive[3] = false;
+        }
+    }
+    // 4 - Speed buff
+    if(isBuffActive[4])
+    {
+        buffCnt[4] += 1;
+        if(buffCnt[4] >= buffDuration[4])
+        {
+            isBuffActive[4] = false;
+        }
+    }
 }
 
 void BuffesDrawing()
@@ -927,7 +1076,7 @@ void GameManager(Vector2 playerPos)
         for(int i = 0; i < zombiesNum; i++)
         {
             Vector2 randomPos = GenerateRandomPos(playerPos);
-            Zombie zombie(randomPos, zombieSize, 0);
+            Zombie zombie(randomPos, zombieSize, 1);
             
             zombies.push_back(zombie);
         }
@@ -1001,7 +1150,7 @@ int main()
     
     Weapon weapon(80.0f, 20.0f, {player.getSize(), player.getSize()});
     Weapon weapon1(80.0f, 20.0f, {player.getSize(), -player.getSize()});
-    Satelite satelite(sateliteRotationSpeed, sateliteRotationSpeed, &player);
+    Satelite satelite(&player);
 
     int cnt = 0;
 
@@ -1026,6 +1175,9 @@ int main()
         // Update zombie based on player position
         ZombiesUpdate(player);
 
+        // Update buffes
+        BuffesUpdate(player.getPos(), player.getSize());
+
         // Handle projectile
         ProjectilesHandling();
 
@@ -1035,7 +1187,9 @@ int main()
             //std::cout << "Mouse : " << mousePos.x << ' ' << mousePos.y << '\n';
             std::cout << "Player: " << player.getPosX() << ' ' << player.getPosY() << '\n';
             //std::cout << "World : " << worldPos.x << ' ' << worldPos.y << '\n';
-
+            std::cout << "Weapon level: " << weaponLevel << '\n';
+            std::cout << "Weapon tier: " << weaponTier << '\n';
+            std::cout << "Satelite level: " << sateliteLevel << '\n';
             /*
             auto it = zombies.begin();
             while(it != zombies.end())
@@ -1108,6 +1262,11 @@ int main()
         {
             DrawText("RELOADING", 0, 90, 30, WHITE);
         }
+
+        DrawTexturePro(iconTex[0], Rectangle {0, 0, float(buffSize / 2), float(buffSize / 2)},
+                       {15, 120, float(buffSize / 2), float(buffSize / 2)},
+                       {float(buffSize / 4), float(buffSize / 4)}, 0, RAYWHITE);
+
 
         EndDrawing();
         //----------------------------------------------------------------------------------
