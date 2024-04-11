@@ -31,13 +31,10 @@ int zombieSize = 80;
 int sateliteSize = 60;
 int sateliteRotationSpeed = 2;
 int sateliteDist = 40;
-int sateliteUpCount = 0;
-int sateliteLevel = 10;
+int sateliteLevel = 0;
 
 // Weapon
-int weaponWidth = 80;
-int weaponHeight = 20;
-int weaponUpCount = 1;
+int weaponWidth[20] = {40, 40, 80, 50, 60}, weaponHeight[20] = {10, 10, 20, 15, 20};
 int weaponLevel = 1;
 int weaponTier = 1;
 
@@ -163,7 +160,7 @@ class Projectile
 
         int getDamage() const
         {
-            return damage * weaponLevel * weaponTier;
+            return damage;
         }
 };
 
@@ -177,19 +174,24 @@ class Weapon
         float rotation;
         float width, height;     
         int maxAmmo = 30;
-        int curAmmo = 30;
-        float projectileSpeed = 3.0f;
+        int curAmmo = 0;
+        float projectileSpeed = 10.0f;
         bool isReloading = false;
         int reloadInterval = 0;
         int reloadIntervalDuration = 120;
         int shootInterval = 0;
         int shootIntervalDuration = 30;
+        int damage;
 
     public:
-        Weapon(float _width, float _height, Vector2 _offset)
+        Weapon(float _width, float _height, int _maxAmmo, int _shootIntervalDuration, int _damage, Vector2 _offset)
         {
             width = _width;
             height = _height;
+            maxAmmo = _maxAmmo;
+            curAmmo = maxAmmo;
+            shootIntervalDuration = _shootIntervalDuration;
+            damage = _damage;
             offset = _offset;
         }
 
@@ -214,15 +216,38 @@ class Weapon
             Vector2 frontEndOffset = {width / 2, 0};
             Vector2 frontEndPos = Vector2Add(pos, Vector2Rotate(frontEndOffset, rotation * DEG2RAD));
 
-            // Shot projectile when mouse button is pressed
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !isReloading && curAmmo > 0 && shootInterval >= shootIntervalDuration)
+            // Shot projectile when mouse button is pressed (for tier 2 and below)
+            if (weaponTier <= 2 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !isReloading && curAmmo > 0 && shootInterval >= shootIntervalDuration)
             {
                 // Calculate the direction of the projectile based on the weapon's rotation
                 float projectileDirection = rotation;
 
                 // Create the projectile object with its position set to the front end of the weapon
                 // and its velocity determined by the direction of fire
-                projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed, 2, 3));
+                projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed, damage + (2 * (weaponLevel - 1)), 3));
+
+                // Reduce ammo by 1
+                if(!isBuffActive[0])
+                {
+                    curAmmo -= 1;
+                }
+
+                // Play weapon sound effect
+                PlaySound(weaponSound[0]);
+
+                // Restart the shoot interval
+                shootInterval = 0;
+            }
+
+            // Shot projectile when mouse button is down (for tier 3 and above)
+            if (weaponTier > 2 && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && !isReloading && curAmmo > 0 && shootInterval >= shootIntervalDuration)
+            {
+                // Calculate the direction of the projectile based on the weapon's rotation
+                float projectileDirection = rotation;
+
+                // Create the projectile object with its position set to the front end of the weapon
+                // and its velocity determined by the direction of fire
+                projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed, damage * weaponLevel, 3));
 
                 // Reduce ammo by 1
                 if(!isBuffActive[0])
@@ -280,13 +305,29 @@ class Weapon
         void draw()
         {
             // Draw the weapon at its position
-            DrawTexturePro(weaponTex[0], Rectangle {0, 0, width, height}, {pos.x, pos.y, width, height}, {width / 2, height / 2}, rotation, level[weaponLevel]);
+            DrawTexturePro(weaponTex[weaponTier - 1], Rectangle {0, 0, width, height}, {pos.x, pos.y, width, height}, {width / 2, height / 2}, rotation, level[weaponLevel]);
 
             // Draw all projectiles
             for (const auto& projectile : projectiles) {
                 projectile.draw();
             }
         }
+};
+
+Weapon weaponList[7]
+{
+    // Tier 1 - Short baguette
+    {float(weaponWidth[0]), float(weaponHeight[0]), 16, 60, 4, {float(playerSize) / 2, float(playerSize) / 2}},
+    // Tier 2 - Double short baguette
+    {float(weaponWidth[1]), float(weaponHeight[1]), 16, 60, 4, {float(playerSize) / 2, float(playerSize) / 2}},
+    {float(weaponWidth[1]), float(weaponHeight[1]), 16, 60, 4, {float(playerSize) / 2, -float(playerSize) / 2}},
+    // Tier 3 - Baguette rifle
+    {float(weaponWidth[2]), float(weaponHeight[2]), 30, 20, 6, {float(playerSize) / 2, float(playerSize) / 2}},
+    // Tier 4 - Double baguette uzis
+    {float(weaponWidth[3]), float(weaponHeight[3]), 60, 10, 3, {float(playerSize) / 2, float(playerSize) / 2}},
+    {float(weaponWidth[3]), float(weaponHeight[3]), 60, 10, 3, {float(playerSize) / 2, -float(playerSize) / 2}},
+    // Tier 5 - Baguette machine gun
+    {float(weaponWidth[4]), float(weaponHeight[4]), 500, 0, 1, {float(playerSize) / 2, float(playerSize) / 2}}
 };
 
 // Player current weapon
@@ -454,7 +495,7 @@ class Player : public Entity
 
     void draw() override
     {
-        DrawCircle(pos.x, pos.y, size / 2, RED);
+        //DrawCircle(pos.x, pos.y, size / 2, RED);
         DrawTexturePro(playerTex, Rectangle {0, 0, size, size}, {pos.x, pos.y, size, size}, {size / 2, size / 2}, rotation, RAYWHITE);
     }
 };
@@ -572,25 +613,17 @@ void ZombieDrop(Vector2 zombiePos, int type)
         {
             item = GetRandomValue(0, 4);
             // If satelite upgrade is maxed, change buff
-            if(item == 1 && sateliteUpCount >= 10)
+            if(item == 1 && sateliteLevel >= 10)
             {
                 continue;
             }
             // If baguette upgrade is maxed, change buff
-            if(item == 2 && weaponUpCount >= 50)
+            if(item == 2 && (weaponLevel >= 10 && weaponTier >= 5))
             {
                 continue;
             }
             else
             {
-                if(item == 1)
-                {
-                    sateliteUpCount += 1;
-                }
-                else if(item == 2)
-                {
-                    weaponUpCount += 1;
-                }
                 break;
             }
         }
@@ -732,6 +765,10 @@ void LoadAllImage()
     zombieImg[3] = LoadImage("../graphics/asteroid.png");
     
     weaponImg[0] = LoadImage("../graphics/baguette.png");
+    weaponImg[1] = LoadImage("../graphics/baguette.png");
+    weaponImg[2] = LoadImage("../graphics/baguette.png");
+    weaponImg[3] = LoadImage("../graphics/baguette.png");
+    weaponImg[4] = LoadImage("../graphics/baguette.png");
     
     sateliteImg = LoadImage("../graphics/moon.png");
     
@@ -759,7 +796,11 @@ void ResizeAllImage()
     ImageResize(&zombieImg[2], zombieSize, zombieSize);
     ImageResize(&zombieImg[3], zombieSize * 4, zombieSize * 4);
 
-    ImageResize(&weaponImg[0], weaponWidth, weaponHeight);
+    ImageResize(&weaponImg[0], weaponWidth[0], weaponHeight[0]);
+    ImageResize(&weaponImg[1], weaponWidth[1], weaponHeight[1]);
+    ImageResize(&weaponImg[2], weaponWidth[2], weaponHeight[2]);
+    ImageResize(&weaponImg[3], weaponWidth[3], weaponHeight[3]);
+    ImageResize(&weaponImg[4], weaponWidth[4], weaponHeight[4]);
 
     ImageResize(&sateliteImg, sateliteSize, sateliteSize);
 
@@ -787,7 +828,10 @@ void LoadAllTexture()
         zombieTex[i] = LoadTextureFromImage(zombieImg[i]);
     }  
 
-    weaponTex[0] = LoadTextureFromImage(weaponImg[0]);
+    for(int i = 0; i < 5; i++)
+    {
+        weaponTex[i] = LoadTextureFromImage(weaponImg[i]);
+    }
 
     sateliteTex = LoadTextureFromImage(sateliteImg);
 
@@ -890,6 +934,26 @@ void ProjectilesHandling()
     }
 }
 
+void WeaponUpdate(Vector2 playerPos, float rotation)
+{
+    auto it = curWeapon.begin();
+    while(it != curWeapon.end())
+    {
+        it->update(playerPos, rotation);
+        ++it;
+    }
+}
+
+void WeaponDraw()
+{
+    auto it = curWeapon.begin();
+    while(it != curWeapon.end())
+    {
+        it->draw();
+        ++it;
+    }
+}
+
 void ZombiesUpdate(Player& player)
 {
     auto zombieIt = zombies.begin();
@@ -981,11 +1045,38 @@ void BuffesUpdate(Vector2 playerPos, float playerRadius)
         // and reset weapon level to 1
         if(weaponLevel >= 10 && weaponTier < 5)
         {
+            // Reset weapon level and increase weapon tier
             weaponLevel = 1;
             weaponTier += 1;
-            curWeapon.erase(curWeapon.begin());
-            // Change weapon ...
-            //curWeapon.push(weapon)
+
+            // Remove all current weapon
+            while(curWeapon.size() > 0)
+            {
+                curWeapon.erase(curWeapon.begin());
+            }
+            
+            // Tier 2 - Double short baguette
+            if(weaponTier == 2)
+            {
+                curWeapon.push_back(weaponList[1]);
+                curWeapon.push_back(weaponList[2]);
+            }
+            // Tier 3 - Baguette rifle
+            else if(weaponTier == 3)
+            {
+                curWeapon.push_back(weaponList[3]);
+            }
+            // Tier 4 - Double baguette uzis
+            else if(weaponTier == 4)
+            {
+                curWeapon.push_back(weaponList[4]);
+                curWeapon.push_back(weaponList[5]);
+            }
+            // Tier 5 - Baguette machine gun
+            else if(weaponTier == 5)
+            {
+                curWeapon.push_back(weaponList[6]);
+            }
         }
 
         isBuffActive[2] = false;
@@ -1020,9 +1111,28 @@ void BuffesDrawing()
     }
 }
 
-void ResetGame()
+void GameStart()
 {
+    // Clear all previous objects
+    zombies.clear();
+    curWeapon.clear();
+    lootBoxes.clear();
 
+    // Reset wave
+    waveNum = 0;
+    zombiesNum = 0;
+    zombiesLevel = 1;
+
+    // Reset weapon stat
+    weaponTier = 1;
+    weaponLevel = 1;
+
+    // Reset satelite stat
+    sateliteLevel = 0;
+
+    // Give tier 1 weapon to player
+    //curWeapon.push_back(weaponList[weaponTier]);
+    curWeapon.push_back(weaponList[0]);
 }
 
 void GameOver()
@@ -1076,7 +1186,7 @@ void GameManager(Vector2 playerPos)
         for(int i = 0; i < zombiesNum; i++)
         {
             Vector2 randomPos = GenerateRandomPos(playerPos);
-            Zombie zombie(randomPos, zombieSize, 1);
+            Zombie zombie(randomPos, zombieSize, 0);
             
             zombies.push_back(zombie);
         }
@@ -1148,8 +1258,8 @@ int main()
 
     Player player({ 0, 0 });
     
-    Weapon weapon(80.0f, 20.0f, {player.getSize(), player.getSize()});
-    Weapon weapon1(80.0f, 20.0f, {player.getSize(), -player.getSize()});
+    GameStart();
+
     Satelite satelite(&player);
 
     int cnt = 0;
@@ -1169,8 +1279,7 @@ int main()
         satelite.update();
 
         // Update weapon
-        weapon.update(player.getPos(), player.getRotation());
-        weapon1.update(player.getPos(), player.getRotation());
+        WeaponUpdate(player.getPos(), player.getRotation());
 
         // Update zombie based on player position
         ZombiesUpdate(player);
@@ -1242,29 +1351,31 @@ int main()
 
             player.draw();
 
-            satelite.draw();
+            WeaponDraw();
 
-            weapon.draw();
-            weapon1.draw();
+            satelite.draw();
 
             ZombiesDrawing();
 
             EndMode2D();
             //-----------------------------------------------------------------------------------------------
 
-        DrawText(TextFormat("Wave %d Remaining enemies %d", waveNum, zombies.size()), 0, 0, 30, WHITE);
+        DrawText(TextFormat("Wave %d", waveNum), 0, 0, 30, WHITE);
 
-        DrawText(TextFormat("Energy: %d%", player.getSprintEnergy() / 9), 0, 30, 30, WHITE);
+        DrawText(TextFormat("Remaining enemies %d", zombies.size()), 0, 30, 30, WHITE);
 
-        DrawText(TextFormat("Ammo: %d/%d%", weapon.getCurAmmo(), weapon.getMaxAmmo()), 0, 60, 30, WHITE);
+        DrawText(TextFormat("Energy: %d%", player.getSprintEnergy() / 9), 0, 60, 30, WHITE);
 
-        if(weapon.getIsReloading())
+        auto weaponIt = curWeapon.begin();
+        DrawText(TextFormat("Ammo: %d/%d%", weaponIt->getCurAmmo(), weaponIt->getMaxAmmo()), 0, 90, 30, WHITE);
+
+        if(weaponIt->getIsReloading())
         {
-            DrawText("RELOADING", 0, 90, 30, WHITE);
+            DrawText("RELOADING", 0, 120, 30, WHITE);
         }
 
         DrawTexturePro(iconTex[0], Rectangle {0, 0, float(buffSize / 2), float(buffSize / 2)},
-                       {15, 120, float(buffSize / 2), float(buffSize / 2)},
+                       {30, 140, float(buffSize / 2), float(buffSize / 2)},
                        {float(buffSize / 4), float(buffSize / 4)}, 0, RAYWHITE);
 
 
