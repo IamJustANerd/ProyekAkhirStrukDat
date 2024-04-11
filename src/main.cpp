@@ -23,6 +23,7 @@ int displayHeight;                // max window height
 // Objects
 // Player
 int playerSize = 80;
+int score = 0;
 
 // Zombie
 int zombieSize = 80;
@@ -43,14 +44,14 @@ int buffSize = 60;
 bool isBuffActive[5];
 int buffCnt[5] = {0, 0, 0, 0, 0};
 // 60 = 1 second
-int buffDuration[5] = {18000, 18000, 18000, 18000, 18000};
+int buffDuration[5] = {1800, 1800, 1800, 1800, 1800};
 
 // Background
 int bgWidth = 6000;
 int bgHeight = 4000;
 
 // Game manager
-bool inGame = true;
+bool inGame = false;
 int waveNum = 0;
 int zombiesNum = 0;
 int zombiesLevel = 1;
@@ -339,7 +340,7 @@ class LootBox
     int item;
     /*
     Item list:
-    0 - (Fire icon) - Infinity ammo, lasts for 30 seconds.
+    0 - (Fire icon) - Infinity ammo and double damage, lasts for 30 seconds.
     1 - (Moon icon) - Gain satelite. Only one satelite can exist at the same time. Gaining more will increase its level
         by 1, up to level 10 (golden colour). Each level increase its damage by 2. Taking another buff will only increase its speed
     2 - (Baguette bucket icon) Upgrade current weapon level by 1. Each level increase its damage by 2. Reaching level 10 will
@@ -404,8 +405,8 @@ class Player : public Entity
 {
     private:
     int sprintEnergy = 900;
-    float sprintSpeed = 5.0f;
-    float normalSpeed = 25.0f;
+    float sprintSpeed = 10.0f;
+    float normalSpeed = 5.0f;
     bool isSprinting = false;
     float rotation = 0.0f;
     float size = 80.0f;
@@ -416,12 +417,20 @@ class Player : public Entity
         pos = _pos;
     }
 
+    bool getIsSprinting() { return isSprinting; }
+
     int getSprintEnergy() { return sprintEnergy; }
 
     float getRotation() { return rotation; }
 
     void update() override
     {
+        // Only update when the game started
+        if(!inGame)
+        {
+            sprintEnergy = 900;
+            return;
+        }
         // Player Sprint mode
         // Increase movement speed for a certain period of time
         if((IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT)) && !isSprinting && sprintEnergy >= 900)
@@ -495,6 +504,11 @@ class Player : public Entity
 
     void draw() override
     {
+        // Only draw player when the game started
+        if(!inGame)
+        {
+            return;
+        }
         //DrawCircle(pos.x, pos.y, size / 2, RED);
         DrawTexturePro(playerTex, Rectangle {0, 0, size, size}, {pos.x, pos.y, size, size}, {size / 2, size / 2}, rotation, RAYWHITE);
     }
@@ -503,7 +517,7 @@ class Player : public Entity
 class Zombie : public Entity
 {
     private:
-    float speed = 3.0f + (0.1f * zombiesLevel);
+    float speed = 2.0f + (0.1f * zombiesLevel);
     float rotation;
     Vector2 dir;
     Vector2 playerPos;
@@ -674,7 +688,14 @@ class Satelite {
                     zombieIt->sateliteHitCd >= zombieIt->getSateliteHitInterval())
                 {
                     // Reduce health
-                    zombieIt->health -= damage * sateliteLevel;
+                    if(isBuffActive[0])
+                    {
+                        zombieIt->health -= damage * sateliteLevel * 2;
+                    }
+                    else
+                    {   
+                        zombieIt->health -= damage * sateliteLevel;
+                    }
 
                     // Enter satelite hit cooldown
                     zombieIt->sateliteHitCd = 0;
@@ -688,6 +709,27 @@ class Satelite {
                             ZombieDrop(zombieIt->getPos(), zombieIt->getType());
                         }
                         
+                        // Gain score
+                        int point = 0;
+                        if(zombieIt->getType() == 0)
+                        {
+                            point = 1;
+                        }
+                        else if(zombieIt->getType() == 1)
+                        {
+                            point = 2;
+                        }
+                        else if(zombieIt->getType() == 2)
+                        {
+                            point = 50;
+                        }
+                        else if(zombieIt->getType() == 3)
+                        {
+                            point = 20;
+                        }
+                        score += point * zombiesLevel;
+
+                        // Delete zombie
                         zombieIt = zombies.erase(zombieIt);
                     }
                 }
@@ -712,8 +754,8 @@ void WindowSetup()
     display = GetCurrentMonitor();
     displayWidth = 800;
     displayHeight = 450;
-    //displayWidth = GetMonitorWidth(display);
-    //displayHeight = GetMonitorHeight(display);
+    displayWidth = GetMonitorWidth(display);
+    displayHeight = GetMonitorHeight(display);
 }
 
 int GetDisplayWidth()
@@ -898,7 +940,14 @@ void ProjectilesHandling()
             // If hit, then reduce zombie health
             if (CheckCollisionCircles(projectileCircle.pos, projectileCircle.radius, zombieCircle.pos, zombieCircle.radius))
             {
-                zombieIt->health -= projectileIt->getDamage();
+                if(isBuffActive[0])
+                {
+                    zombieIt->health -= projectileIt->getDamage() * 2;
+                }
+                else
+                {   
+                    zombieIt->health -= projectileIt->getDamage();
+                }
 
                 // If health below zero, kill zombie
                 if(zombieIt->health <= 0)
@@ -908,7 +957,28 @@ void ProjectilesHandling()
                     {
                         ZombieDrop(zombieIt->getPos(), zombieIt->getType());
                     }
+
+                    // Gain score
+                    int point = 0;
+                    if(zombieIt->getType() == 0)
+                    {
+                        point = 1;
+                    }
+                    else if(zombieIt->getType() == 1)
+                    {
+                        point = 2;
+                    }
+                    else if(zombieIt->getType() == 2)
+                    {
+                        point = 50;
+                    }
+                    else if(zombieIt->getType() == 3)
+                    {
+                        point = 20;
+                    }
+                    score += point * zombiesLevel;
                 
+                    // Delete zombie
                     zombieIt = zombies.erase(zombieIt);
                 }
 
@@ -968,7 +1038,8 @@ void ZombiesUpdate(Player& player)
         if (CheckCollisionCircles(playerCircle.pos, playerCircle.radius, zombieCircle.pos, zombieCircle.radius))
         {
             // Game over
-            // std::cout << "Game Over" << std::endl;
+            inGame = false;
+            break;
         }
 
         ++zombieIt;
@@ -1113,10 +1184,16 @@ void BuffesDrawing()
 
 void GameStart()
 {
+    // Mark the game as started
+    inGame = true;
+
     // Clear all previous objects
     zombies.clear();
     curWeapon.clear();
     lootBoxes.clear();
+
+    // Reset score
+    score = 0;
 
     // Reset wave
     waveNum = 0;
@@ -1137,7 +1214,32 @@ void GameStart()
 
 void GameOver()
 {
-    
+    // Mark the game as finished
+    inGame = false;
+
+    // Clear all objects
+    zombies.clear();
+    curWeapon.clear();
+    lootBoxes.clear();
+    sateliteLevel = 0;
+
+    // Clear all buff
+    for(int i = 0; i < 5; i++)
+    {
+        isBuffActive[i] = false;
+    }
+
+    // Stay while enter key has yet to be pressed
+    while(!IsKeyPressed(KEY_ENTER))
+    {
+        BeginDrawing();
+            // Show game over title along with total score
+            ClearBackground(BLACK);
+            DrawText("GAME OVER", GetScreenWidth() / 2 - 150, GetScreenHeight() / 2 - 40, 60, WHITE);
+            DrawText(TextFormat("LAST SCORE: %d", score), GetScreenHeight() / 2 - 150, GetScreenHeight() / 2 + 80, 30, WHITE);    
+            DrawText("PRESS ENTER TO CONTINUE", GetScreenHeight() / 2 - 150, GetScreenHeight() / 2 + 120, 30, WHITE);    
+        EndDrawing();
+    }
 }
 
 Vector2 GenerateRandomPos(Vector2 playerPos) {
@@ -1170,6 +1272,12 @@ Vector2 GenerateRandomPos(Vector2 playerPos) {
 
 void GameManager(Vector2 playerPos)
 {
+    // Only happen when the game started
+    if(!inGame)
+    {
+        return;
+    }
+
     // If all current zombies eliminated, start a new wave
     if(zombies.size() == 0)
     {
@@ -1226,6 +1334,262 @@ void GameManager(Vector2 playerPos)
     }
 }
 
+void InGame(Player *player, Satelite *satelite)
+{   
+    // Manage the wave
+    GameManager(player->getPos());
+
+    // Update player
+    player->update();
+
+    // Update satelite
+    satelite->update();
+
+    // Update weapon
+    WeaponUpdate(player->getPos(), player->getRotation());
+
+    // Update zombie based on player position
+    ZombiesUpdate(*player);
+
+    // If player is dead, stop all actions and return
+    if(!inGame)
+    {
+        return;
+    }
+
+    // Update buffes
+    BuffesUpdate(player->getPos(), player->getSize());
+
+    // Handle projectile
+    ProjectilesHandling();
+
+    // Update camera
+    UpdateCamera(*player);
+
+    // Draw
+    //----------------------------------------------------------------------------------
+    BeginDrawing();
+        
+        // These will be the only objects that are moving from camera perspective,
+        // while the others outside of this will remain static
+
+        // Begin 2D mode with camera
+        //-----------------------------------------------------------------------------------------------
+        BeginMode2D(camera);
+
+        // Draw background
+        // Top left corner
+        DrawTexture(bgTex, -6000, 0, GRAY);
+        // Bottom left corner
+        DrawTexture(bgTex, -6000, -4000, GRAY);
+        // Top right corner
+        DrawTexture(bgTex, 0, 0, GRAY);
+        // Bottom right corner
+        DrawTexture(bgTex, 0, -4000, GRAY);
+        // Draw border line
+        DrawRectangleLines(-6000, -4000, 12000, 8000, WHITE);
+
+        BuffesDrawing();
+
+        player->draw();
+
+        WeaponDraw();
+
+        satelite->draw();
+
+        ZombiesDrawing();
+
+        EndMode2D();
+        //-----------------------------------------------------------------------------------------------
+
+    /*
+    if(!inGame)
+    {
+        continue;
+    }
+    */
+
+    // Draw UI
+    // Draw current score
+    DrawText(TextFormat("Score: %d", score), 0, 0, 30, WHITE);
+
+    // Draw wave status
+    DrawText(TextFormat("Wave: %d", waveNum), 0, 40, 30, WHITE);
+
+    // Draw enemies status
+    DrawText(TextFormat("Remaining enemies: %d", zombies.size()), 0, 80, 30, WHITE);
+
+    // Draw energy status
+    DrawText(TextFormat("Energy: %d%", player->getSprintEnergy() / 9), 0, 120, 30, WHITE);
+    if(player->getSprintEnergy() < 900 && !player->getIsSprinting())
+    {
+        DrawText(TextFormat("Recharging", player->getSprintEnergy() / 9), 220, 120, 30, WHITE);
+    }
+    else if(!player->getIsSprinting())
+    {
+        DrawText(TextFormat("Ready", player->getSprintEnergy() / 9), 220, 120, 30, WHITE);
+    }
+
+    // Draw weapon status
+    auto weaponIt = curWeapon.begin();
+    DrawText(TextFormat("Ammo: %d/%d%", weaponIt->getCurAmmo(), weaponIt->getMaxAmmo()), 0, 160, 30, WHITE);
+
+    if(weaponIt->getIsReloading())
+    {
+        DrawText("RELOADING", 0, 200, 30, WHITE);
+    }
+
+    // Draw buff status
+    // Unlimited ammo buff
+    if(isBuffActive[0])
+    {
+        DrawTexturePro(buffTex[0], Rectangle {0, 0, float(buffSize), float(buffSize)},
+                       {40, GetScreenHeight() - 40.0f, float(buffSize), float(buffSize)},
+                       {float(buffSize / 2), float(buffSize / 2)}, 0, RAYWHITE);
+        DrawText(TextFormat("%ds", (buffDuration[0] - buffCnt[0]) / 60), 25, GetScreenHeight() - 40, 15, WHITE);
+    }
+
+    // Slow debuff
+    if(isBuffActive[3])
+    {
+        DrawTexturePro(buffTex[3], Rectangle {0, 0, float(buffSize), float(buffSize)},
+                       {100, GetScreenHeight() - 40.0f, float(buffSize), float(buffSize)},
+                       {float(buffSize / 2), float(buffSize / 2)}, 0, RAYWHITE);
+        DrawText(TextFormat("%ds", (buffDuration[3] - buffCnt[3]) / 60), 85, GetScreenHeight() - 40, 15, WHITE);
+    }
+
+    // Unlimited energy buff
+    if(isBuffActive[4])
+    {
+        DrawTexturePro(buffTex[4], Rectangle {0, 0, float(buffSize), float(buffSize)},
+                       {160, GetScreenHeight() - 40.0f, float(buffSize), float(buffSize)},
+                       {float(buffSize / 2), float(buffSize / 2)}, 0, RAYWHITE);
+        DrawText(TextFormat("%ds", (buffDuration[4] - buffCnt[4]) / 60), 145, GetScreenHeight() - 40, 15, WHITE);
+    }
+
+
+    EndDrawing();
+    //----------------------------------------------------------------------------------
+}
+
+void PrintTutorial()
+{
+    BeginDrawing();
+        ClearBackground(BLACK);
+        DrawText("BASIC", 10, 10, 60, WHITE); 
+        DrawText("MOVEMENTS: WASD / ARROW KEYS", 10, 80, 40, WHITE); 
+        DrawText("SPRINT: LEFT SHIFT / RIGHT SHIFT", 10, 150, 40, WHITE);    
+        DrawText("SHOOT: LEFT MOUSE BUTTON", 10, 220, 40, WHITE); 
+        DrawText("RELOAD: R", 10, 290, 40, WHITE); 
+        DrawText("PRESS ENTER TO CONTINUE", 10, 360, 40, WHITE); 
+    EndDrawing();
+}
+
+void PrintBuffList()
+{
+    BeginDrawing();
+        ClearBackground(BLACK);
+        DrawText("BUFF LIST", 10, 10, 60, WHITE);  
+        DrawTexturePro(buffTex[0], Rectangle {0, 0, float(buffSize), float(buffSize)},
+                       {50, 150, float(buffSize), float(buffSize)},
+                       {float(buffSize / 2), float(buffSize / 2)}, 0, RAYWHITE);
+        DrawText("INFINITY AMMO & DOUBLE DAMAGE", 100, 130, 40, WHITE);              
+        DrawTexturePro(buffTex[1], Rectangle {0, 0, float(buffSize), float(buffSize)},
+                       {50, 290, float(buffSize), float(buffSize)},
+                       {float(buffSize / 2), float(buffSize / 2)}, 0, RAYWHITE);
+        DrawText("ORBIT THE PLAYER, DEAL DAMAGE TO ENEMIES", 100, 270, 40, WHITE);             
+        DrawTexturePro(buffTex[2], Rectangle {0, 0, float(buffSize), float(buffSize)},
+                       {50, 430, float(buffSize), float(buffSize)},
+                       {float(buffSize / 2), float(buffSize / 2)}, 0, RAYWHITE);
+        DrawText("UPGRADE WEAPON LEVEL, CHANGE WEAPON EVERY TEN LEVELS", 100, 410, 40, WHITE);  
+        DrawTexturePro(buffTex[3], Rectangle {0, 0, float(buffSize), float(buffSize)},
+                       {50, 570, float(buffSize), float(buffSize)},
+                       {float(buffSize / 2), float(buffSize / 2)}, 0, RAYWHITE);
+        DrawText("SLOW ENEMIES MOVEMENT SPEED BY 50%", 100, 550, 40, WHITE);  
+        DrawTexturePro(buffTex[4], Rectangle {0, 0, float(buffSize), float(buffSize)},
+                       {50, 710, float(buffSize), float(buffSize)},
+                       {float(buffSize / 2), float(buffSize / 2)}, 0, RAYWHITE);
+        DrawText("SPRINT WITHOUT USING ENERGY", 100, 690, 40, WHITE);  
+        DrawText("PRESS ENTER TO CONTINUE", 10, 800, 40, WHITE); 
+    EndDrawing();
+}
+
+void PrintLevelList()
+{
+    BeginDrawing();
+        ClearBackground(BLACK);
+        DrawText("COLOR LIST FOR WEAPONS AND ENEMIES LEVELS", 10, 10, 60, WHITE); 
+        DrawText("LEVEL 1 - NORMAL"                         , 10, 80, 40, level[1]); 
+        DrawText("LEVEL 2 - RED"                            , 10, 150, 40, level[2]); 
+        DrawText("LEVEL 3 - ORANGE"                         , 10, 220, 40, level[3]); 
+        DrawText("LEVEL 4 - YELLOW"                         , 10, 290, 40, level[4]); 
+        DrawText("LEVEL 5 - GREEN"                          , 10, 360, 40, level[5]); 
+        DrawText("LEVEL 6 - DARK GREEN"                     , 10, 430, 40, level[6]); 
+        DrawText("LEVEL 7 - DARK BLUE"                      , 10, 500, 40, level[7]); 
+        DrawText("LEVEL 8 - BLUE"                           , 10, 570, 40, level[8]); 
+        DrawText("LEVEL 9 - PURPLE"                         , 10, 640, 40, level[9]); 
+        DrawText("LEVEL 10 - GOLD"                          , 10, 710, 40, level[10]);
+        DrawText("PRESS ENTER TO RETURN"                    , 10, 780, 40, WHITE); 
+    EndDrawing();
+}
+
+void PrintCredit()
+{
+    BeginDrawing();
+        ClearBackground(BLACK);
+        DrawText("DIBUAT OLEH:", GetScreenHeight() / 2 - 150, GetScreenHeight() / 2 - 80, 30, WHITE);    
+        DrawText("MICHAEL / 5024231022 / PEMROGRAMAN LANJUT A", GetScreenHeight() / 2 - 150, GetScreenHeight() / 2 - 40, 30, WHITE);  
+        DrawText("DOSEN PENGAJAR:", GetScreenHeight() / 2 - 150, GetScreenHeight() / 2, 30, WHITE);  
+        DrawText("DR. ARIEF KURNIAWAN, S.T., M.T.", GetScreenHeight() / 2 - 150, GetScreenHeight() / 2 + 40, 30, WHITE);  
+        DrawText("PRESS ENTER TO RETURN", GetScreenHeight() / 2 - 150, GetScreenHeight() / 2 + 80, 30, WHITE);
+    EndDrawing();
+}
+
+enum TutorialState {
+    TUTORIAL,
+    BUFF_LIST,
+    LEVEL_LIST,
+    FINISHED
+};
+
+void HandleTutorial() {
+    enum TutorialState currentState = TUTORIAL;
+
+    while (currentState != FINISHED) {
+        // Depending on the current state, print the corresponding tutorial
+        switch (currentState) {
+            case TUTORIAL:
+                PrintTutorial();
+                break;
+            case BUFF_LIST:
+                PrintBuffList();
+                break;
+            case LEVEL_LIST:
+                PrintLevelList();
+                break;
+            case FINISHED:
+                break;
+        }
+
+        // Check if the Enter key is pressed to advance to the next state
+        if (IsKeyPressed(KEY_ENTER)) {
+            switch (currentState) {
+                case TUTORIAL:
+                    currentState = BUFF_LIST;
+                    break;
+                case BUFF_LIST:
+                    currentState = LEVEL_LIST;
+                    break;
+                case LEVEL_LIST:
+                    currentState = FINISHED;
+                    break;
+                case FINISHED:
+                    break;
+            }
+        }
+    }
+}
+
 int main()
 {
     // Window setup
@@ -1236,15 +1600,15 @@ int main()
 
     // Starting window size
     InitWindow(displayWidth, displayHeight, "Raylib - Black Friday");
-    //ToggleFullscreen();
+    ToggleFullscreen();
 
     // Initialize audio device
     InitAudioDevice();
 
     // World Position
     //std::cout << displayWidth << ' ' << displayHeight << '\n';
-    worldPos = Vector2{displayWidth / 2.0f, displayHeight / 2.0f};
-    //worldPos = Vector2{float(GetDisplayWidth()) / 2, float(GetDisplayHeight()) / 2};
+    //worldPos = Vector2{displayWidth / 2.0f, displayHeight / 2.0f};
+    worldPos = Vector2{float(GetDisplayWidth()) / 2, float(GetDisplayHeight()) / 2};
     startingPos = worldPos;
 
     // Texture Setup
@@ -1256,131 +1620,56 @@ int main()
     // Set Game FPS (frame per second)
     SetTargetFPS(60);
 
+    // Spawn player
     Player player({ 0, 0 });
     
-    GameStart();
-
+    // Spawn satelite
     Satelite satelite(&player);
-
-    int cnt = 0;
 
     // Game loop
     while (!WindowShouldClose())        // While the window is still open
     {
-        ClearBackground(BLACK);
-
-        // Manage the wave
-        GameManager(player.getPos());
-
-        // Update player
-        player.update();
-
-        // Update satelite
-        satelite.update();
-
-        // Update weapon
-        WeaponUpdate(player.getPos(), player.getRotation());
-
-        // Update zombie based on player position
-        ZombiesUpdate(player);
-
-        // Update buffes
-        BuffesUpdate(player.getPos(), player.getSize());
-
-        // Handle projectile
-        ProjectilesHandling();
-
-        Vector2 mousePos = GetMousePosition();
-        // Debugging purpose
-        if(cnt == 60) {
-            //std::cout << "Mouse : " << mousePos.x << ' ' << mousePos.y << '\n';
-            std::cout << "Player: " << player.getPosX() << ' ' << player.getPosY() << '\n';
-            //std::cout << "World : " << worldPos.x << ' ' << worldPos.y << '\n';
-            std::cout << "Weapon level: " << weaponLevel << '\n';
-            std::cout << "Weapon tier: " << weaponTier << '\n';
-            std::cout << "Satelite level: " << sateliteLevel << '\n';
-            /*
-            auto it = zombies.begin();
-            while(it != zombies.end())
-            {
-                std::cout << "Zombie: " << it->getPosX() << ' ' << it->getPosY() << '\n';
-                ++it;
-            }
-
-            auto at = projectiles.begin();
-            while(at != projectiles.end())
-            {
-                std::cout << "Projectile: " << at->getPosition().x << ' ' << at->getPosition().y << '\n';
-                ++at;
-            }
-            */
-            cnt = 0;
-        }
-        cnt += 1;
-        
-
-        // Update camera
-        UpdateCamera(player);
-
-        // Draw
-        //----------------------------------------------------------------------------------
+        // Main menu
         BeginDrawing();
-        
-            // These will be the only objects that are moving from camera perspective,
-            // while the others outside of this will remain static
+            ClearBackground(BLACK);
+            DrawText("BLACK FRIDAY", GetScreenWidth() / 2 - 225, GetScreenHeight() / 2 - 80, 60, WHITE);
+            DrawText("PRESS ENTER TO PLAY", GetScreenHeight() / 2 - 50, GetScreenHeight() / 2, 30, WHITE);    
+            DrawText("PRESS T FOR TUTORIAL", GetScreenHeight() / 2 - 50, GetScreenHeight() / 2 + 40, 30, WHITE);  
+            DrawText("PRESS C FOR CREDIT", GetScreenHeight() / 2 - 50, GetScreenHeight() / 2 + 80, 30, WHITE);  
+        EndDrawing();
 
-            // Begin 2D mode with camera
-            //-----------------------------------------------------------------------------------------------
-            BeginMode2D(camera);
-
-            // Draw background
-            // Top left corner
-            DrawTexture(bgTex, -6000, 0, GRAY);
-            // Bottom left corner
-            DrawTexture(bgTex, -6000, -4000, GRAY);
-            // Top right corner
-            DrawTexture(bgTex, 0, 0, GRAY);
-            // Bottom right corner
-            DrawTexture(bgTex, 0, -4000, GRAY);
-            // Draw border line
-            DrawRectangleLines(-6000, -4000, 12000, 8000, WHITE);
-
-            DrawRectangle(0, 0, 100, 100, RED);
-
-            BuffesDrawing();
-
-            player.draw();
-
-            WeaponDraw();
-
-            satelite.draw();
-
-            ZombiesDrawing();
-
-            EndMode2D();
-            //-----------------------------------------------------------------------------------------------
-
-        DrawText(TextFormat("Wave %d", waveNum), 0, 0, 30, WHITE);
-
-        DrawText(TextFormat("Remaining enemies %d", zombies.size()), 0, 30, 30, WHITE);
-
-        DrawText(TextFormat("Energy: %d%", player.getSprintEnergy() / 9), 0, 60, 30, WHITE);
-
-        auto weaponIt = curWeapon.begin();
-        DrawText(TextFormat("Ammo: %d/%d%", weaponIt->getCurAmmo(), weaponIt->getMaxAmmo()), 0, 90, 30, WHITE);
-
-        if(weaponIt->getIsReloading())
+        // If player press enter button
+        if(IsKeyPressed(KEY_ENTER))
         {
-            DrawText("RELOADING", 0, 120, 30, WHITE);
+            // Setup the game
+            GameStart();
+
+            // Loop while the game is still going
+            while(inGame)
+            {
+                InGame(&player, &satelite);
+            }
+            std::cout << "pass\n";
+
+            // Print game over message
+            GameOver();
         }
 
-        DrawTexturePro(iconTex[0], Rectangle {0, 0, float(buffSize / 2), float(buffSize / 2)},
-                       {30, 140, float(buffSize / 2), float(buffSize / 2)},
-                       {float(buffSize / 4), float(buffSize / 4)}, 0, RAYWHITE);
+        // If player press T button
+        if(IsKeyPressed(KEY_T))
+        {
+            HandleTutorial();
+        }
 
-
-        EndDrawing();
-        //----------------------------------------------------------------------------------
+        // If player press C button
+        if(IsKeyPressed(KEY_C))
+        {
+            while(!IsKeyPressed(KEY_ENTER))
+            {
+                // Print credit
+                PrintCredit();
+            }
+        }
     }
 
     // De-Initialization
