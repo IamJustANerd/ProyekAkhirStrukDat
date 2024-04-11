@@ -1369,7 +1369,7 @@ void InGame(Player *player, Satelite *satelite)
     // Draw
     //----------------------------------------------------------------------------------
     BeginDrawing();
-        
+        ClearBackground(BLACK);
         // These will be the only objects that are moving from camera perspective,
         // while the others outside of this will remain static
 
