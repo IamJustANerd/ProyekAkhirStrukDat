@@ -32,8 +32,8 @@ int bgWidth = 6000;
 int bgHeight = 4000;
 
 bool inGame = true;
-int waveNum = 1;
-int zombiesNum = 5;
+int waveNum = 0;
+int zombiesNum = 1000;
 
 Vector2 worldPos;
 Vector2 startingPos;
@@ -71,15 +71,17 @@ class Projectile
         Vector2 velocity;
         float speed;
         float size;
+        int damage;
         int lifetime = 300;        // Projectile might be disappeared after a certain amount of time
         bool alive = true;
 
     public:
-        Projectile(Vector2 _pos, float _direction, float _speed, float _size)
+        Projectile(Vector2 _pos, float _direction, float _speed, int _damage, float _size)
         {
             pos = _pos;
             speed = _speed;
             size = _size;
+            damage = _damage;
 
             // Calculate velocity based on direction and speed
             velocity.x = cosf(_direction * DEG2RAD) * _speed;
@@ -113,6 +115,11 @@ class Projectile
         float getSize() const
         { 
             return size;
+        }
+
+        int getDamage() const
+        {
+            return damage;
         }
 };
 
@@ -171,7 +178,7 @@ class Weapon
 
                 // Create the projectile object with its position set to the front end of the weapon
                 // and its velocity determined by the direction of fire
-                projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed, 3));
+                projectiles.push_back(Projectile(frontEndPos, projectileDirection, projectileSpeed, 2, 3));
 
                 // Reduce ammo by 1
                 curAmmo -= 1;
@@ -185,8 +192,8 @@ class Weapon
 
             shootInterval += 1;
 
-            // Reload ammo when R button is pressed
-            if (IsKeyPressed(KEY_R) && curAmmo < maxAmmo)
+            // Reload ammo when R button is pressed or when ran out of ammo
+            if ((IsKeyPressed(KEY_R) && curAmmo < maxAmmo) || curAmmo == 0)
             {
                 isReloading = true;
                 curAmmo = 0;
@@ -354,8 +361,13 @@ class Zombie : public Entity
     float rotation;
     Vector2 dir;
     Vector2 playerPos;
+    int maxHealth = 5;
+    int sateliteHitInterval = 120;
 
     public:
+    int sateliteHitCd = 120;
+    int health = 5;
+    
     Zombie(Vector2 _pos, float _size)
     {
         pos = _pos;
@@ -373,17 +385,30 @@ class Zombie : public Entity
         dir.y = sinf(rotation * DEG2RAD) * speed;
 
         pos = Vector2Add(pos, dir);
+
+        // Satelite hit cooldown
+        if(sateliteHitCd < sateliteHitInterval)
+        {
+            sateliteHitCd += 1;
+        }
     }
 
     void draw() override
     {
+        // Draw zombie
         DrawTexturePro(zombieTex[0], Rectangle {0, 0, size, size}, {pos.x, pos.y, size, size}, {size / 2, size / 2}, rotation, RAYWHITE);
+
+        // Draw healthbar
+        DrawRectangle(pos.x - size / 2, pos.y + size / 2, 10 * health, 10, RED);
+        DrawRectangleLines(pos.x - size / 2, pos.y + size / 2, 10 * maxHealth, 10, WHITE);
     }
 
     void setPlayerPos(Vector2 _playerPos)
     {
         playerPos = _playerPos;
     }
+
+    int getSateliteHitInterval() {return sateliteHitInterval; }
 
     Circle getCircle()
     {
@@ -406,6 +431,7 @@ class Satelite {
         Player* parent;
         int dist;
         int angle = 0;
+        int damage = 2;
 
     public:
         Satelite(int _speedX, int _speedY, Player* _parent){
@@ -434,9 +460,23 @@ class Satelite {
             while(zombieIt != zombies.end())
             {
                 Circle zombieCircle = zombieIt->getCircle();
-                if (CheckCollisionCircles(sateliteCircle.pos, sateliteCircle.radius, zombieCircle.pos, zombieCircle.radius))
+                // If hit and currently no in the satelite hit cooldown, reduce zombie health
+                if (CheckCollisionCircles(sateliteCircle.pos, sateliteCircle.radius, zombieCircle.pos, zombieCircle.radius) &&
+                    zombieIt->sateliteHitCd >= zombieIt->getSateliteHitInterval())
                 {
-                    zombieIt = zombies.erase(zombieIt);
+                    // Reduce health
+                    zombieIt->health -= damage;
+
+                    // Enter satelite hit cooldown
+                    zombieIt->sateliteHitCd = 0;
+
+                    // If zombie health drops below zero, kill it
+                    if(zombieIt->health <= 0)
+                    {
+                        zombieIt = zombies.erase(zombieIt);
+                    }
+                    
+                    // Debuggin purpose
                     std::cout << "HIT" << '\n';
                 }
                 else
@@ -506,7 +546,7 @@ void LoadAllSound()
 void LoadAllImage()
 {
     playerImg = LoadImage("../graphics/earth.png");
-    zombieImg[0] = LoadImage("../graphics/moon.png");
+    zombieImg[0] = LoadImage("../graphics/asteroid.png");
     weaponImg[0] = LoadImage("../graphics/baguette.png");
     sateliteImg = LoadImage("../graphics/moon.png");
     bgImg = LoadImage("../graphics/spaceBg.png");
@@ -563,14 +603,27 @@ void ProjectilesHandling()
         while (zombieIt!= zombies.end()) {
             Circle projectileCircle = { projectileIt->getPosition(), projectileIt->getSize() / 2 };
             Circle zombieCircle = zombieIt->getCircle();
+
+            // If hit, then reduce zombie health
             if (CheckCollisionCircles(projectileCircle.pos, projectileCircle.radius, zombieCircle.pos, zombieCircle.radius))
             {
-                zombieIt = zombies.erase(zombieIt);
+                zombieIt->health -= projectileIt->getDamage();
+
+                // If health below zero, kill zombie
+                if(zombieIt->health <= 0)
+                {
+                    zombieIt = zombies.erase(zombieIt);
+                }
+
+                // Remove bullet
                 projectileIt = std::find_if(projectiles.begin(), projectiles.end(), [projectileIt](const Projectile& p) { return &p == projectileIt.operator->(); });
                 if (projectileIt != projectiles.end()) {
                     projectiles.erase(projectileIt);
                 }
+
+                // Debugging purpose
                 std::cout << "HIT" << '\n';
+                
                 break;
             }
             else
@@ -694,13 +747,6 @@ int main()
 
     Player player({ 0, 0 });
     
-    Zombie zombie1({ GetScreenWidth() / 2.0f + 80.0f, GetScreenHeight() / 2.0f + 80.0f}, 80.0f);
-    Zombie zombie2({ GetScreenWidth() / 2.0f - 80.0f, GetScreenHeight() / 2.0f - 80.0f}, 80.0f);
-    Zombie zombie3({ GetScreenWidth() / 2.0f + 80.0f, GetScreenHeight() / 2.0f - 80.0f}, 80.0f);
-    zombies.push_back(zombie1);
-    zombies.push_back(zombie2);
-    zombies.push_back(zombie3);
-    
     Weapon weapon(80.0f, 20.0f, {player.getSize(), player.getSize()});
     Weapon weapon1(80.0f, 20.0f, {player.getSize(), -player.getSize()});
     Satelite satelite(sateliteRotationSpeed, sateliteRotationSpeed, &player);
@@ -732,6 +778,7 @@ int main()
 
         Vector2 mousePos = GetMousePosition();
         // Debugging purpose
+        /*
         if(cnt == 60) {
             std::cout << "Mouse : " << mousePos.x << ' ' << mousePos.y << '\n';
             std::cout << "Player: " << player.getPosX() << ' ' << player.getPosY() << '\n';
@@ -753,6 +800,7 @@ int main()
             cnt = 0;
         }
         cnt += 1;
+        */
 
         // Update camera
         UpdateCamera(player);
@@ -777,6 +825,8 @@ int main()
             DrawTexture(bgTex, 0, 0, GRAY);
             // Bottom right corner
             DrawTexture(bgTex, 0, -4000, GRAY);
+            // Draw border line
+            DrawRectangleLines(-6000, -4000, 12000, 8000, WHITE);
 
             DrawRectangle(0, 0, 100, 100, RED);
 
@@ -792,7 +842,7 @@ int main()
             EndMode2D();
             //-----------------------------------------------------------------------------------------------
 
-        DrawText(TextFormat("Wave: %d%", waveNum), 0, 0, 30, WHITE);
+        DrawText(TextFormat("Wave: %d Remaining enemies: %d", waveNum, zombies.size()), 0, 0, 30, WHITE);
 
         DrawText(TextFormat("Energy: %d%", player.getSprintEnergy() / 9), 0, 30, 30, WHITE);
 
