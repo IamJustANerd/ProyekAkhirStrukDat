@@ -1335,7 +1335,13 @@ void GameManager(Vector2 playerPos)
 }
 
 void InGame(Player *player, Satelite *satelite)
-{   
+{
+    // Exit button
+    if(IsKeyPressed(KEY_Q))
+    {
+        inGame = false;
+    }
+
     // Manage the wave
     GameManager(player->getPos());
 
@@ -1412,6 +1418,9 @@ void InGame(Player *player, Satelite *satelite)
     // Draw UI
     // Draw current score
     DrawText(TextFormat("Score: %d", score), 0, 0, 30, WHITE);
+
+    // Draw exit instruction
+    DrawText("PRESS Q TO EXIT", GetScreenWidth() - 280, 0, 30, WHITE);;
 
     // Draw wave status
     DrawText(TextFormat("Wave: %d", waveNum), 0, 40, 30, WHITE);
@@ -1636,6 +1645,7 @@ int main()
             DrawText("PRESS ENTER TO PLAY", GetScreenHeight() / 2 - 50, GetScreenHeight() / 2, 30, WHITE);    
             DrawText("PRESS T FOR TUTORIAL", GetScreenHeight() / 2 - 50, GetScreenHeight() / 2 + 40, 30, WHITE);  
             DrawText("PRESS C FOR CREDIT", GetScreenHeight() / 2 - 50, GetScreenHeight() / 2 + 80, 30, WHITE);  
+            DrawText("PRESS ESC TO QUIT", GetScreenHeight() / 2 - 50, GetScreenHeight() / 2 + 120, 30, WHITE);  
         EndDrawing();
 
         // If player press enter button
