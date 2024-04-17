@@ -423,6 +423,12 @@ class Player : public Entity
 
     float getRotation() { return rotation; }
 
+    void setPos(float x, float y)
+    {
+        pos.x = x;
+        pos.y = y;
+    }
+
     void update() override
     {
         // Only update when the game started
@@ -1182,15 +1188,19 @@ void BuffesDrawing()
     }
 }
 
-void GameStart()
+void GameStart(Player *player)
 {
     // Mark the game as started
     inGame = true;
+
+    // Put player to the middle of the map
+    player->setPos(0.0f, 0.0f);
 
     // Clear all previous objects
     zombies.clear();
     curWeapon.clear();
     lootBoxes.clear();
+    projectiles.clear();
 
     // Reset score
     score = 0;
@@ -1651,9 +1661,10 @@ int main()
         // If player press enter button
         if(IsKeyPressed(KEY_ENTER))
         {
+            
+            std::cout << "pass\n";
             // Setup the game
-            GameStart();
-
+            GameStart(&player);
             // Loop while the game is still going
             while(inGame)
             {
