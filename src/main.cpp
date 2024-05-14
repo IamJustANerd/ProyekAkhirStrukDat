@@ -1,7 +1,7 @@
 /*
 Nama  : Michael
 NRP   : 5024231022
-Kelas : Pemrograman Lanjut A
+Kelas : Pemrograman Lanjut A 
 
 Project Black Friday
 */
@@ -556,6 +556,7 @@ class Zombie : public Entity
         {
             health = 100;
             maxHealth = health;
+            speed = 5.0f;
         }
         else if(type == 3) // Big zombie
         {
@@ -1661,8 +1662,6 @@ int main()
         // If player press enter button
         if(IsKeyPressed(KEY_ENTER))
         {
-            
-            std::cout << "pass\n";
             // Setup the game
             GameStart(&player);
             // Loop while the game is still going
@@ -1670,7 +1669,6 @@ int main()
             {
                 InGame(&player, &satelite);
             }
-            std::cout << "pass\n";
 
             // Print game over message
             GameOver();
